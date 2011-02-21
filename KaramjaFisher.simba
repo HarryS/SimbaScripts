@@ -1,0 +1,767 @@
+{///////////////////////////////////////////////////////////////////////////////
+//                                                                            //
+//                        Harry's Karamja Fisher v0.9                         //
+//                                                                            //
+//   Requirements:                                                            //
+//     Level 1 (or higher) Fishing level.                                     //
+//     Have one fishing tool in first inv slot, all other slots empty.        //
+//       (Script will drop EVERYTHING that is unrelated to fishing, even GP)  //
+//     Start on the fishing dock. (http://i.imgur.com/JXAnl.png)              //
+//     Edit the consts below (DeclarePlayers, basic setup.)                   //
+//     Latest Simba with latest SRL and Reflection.                           //
+//                                                                            //
+//   Features:                                                                //
+//     Fishes on the Karamja dock.                                            //
+//     If you fish Lobster, Tuna, or Swordfish, your fish turn to bank notes. //
+//     QUALITY SCRIPT                                                         //
+//     Auto-updating!                                                         //
+//     Anti-ban modules.                                                      //
+//     World-switches every ~25 minutes.                                      //
+//     Simple to setup and use!                                               //
+//     And much more!                                                         //
+//                                                                            //
+//   Future features (not yet added):                                         //
+//     SRL Stats.                                                             //
+//     Suggest something on the forums!                                       //
+//                                                                            //
+//   Known bugs:                                                              //
+//     Harpooning is buggy (http://villavu.com/forum/showthread.php?t=61742)  //
+//     That is it! Find any? Report them to my thread.                        //
+//                                                                            //
+////////////////////////////////////////////////////////////////////////////////
+//                                                                            //
+//                              Changelog!                                    //
+//    0.1 - Initial release.                                                  //
+//    0.2 - Fixed typo, removed possible out-of-range error.                  //
+//    0.3 - Added an extra anti-random check when walking.                    //
+//    0.4 - Some logic fixes, more randomness, should run quicker.            //
+//    0.5 - Handles location better, should break less.                       //
+//    0.6 - Fixed small goof that would happen if client lagged.              //
+//    0.7 - Disregards fishtools if already detected previously.              //
+//    0.8 - Shouldn't click on people's names now. More Stiles failsafes.     //
+//    0.9 - Reflection update broke command.                                  //
+//                                                                            //
+////////////////////////////////////////////////////////////////////////////////
+//                                                                            //
+//   Script License: WTFPL - Do What The Fuck You Want To Public License.     //
+//                                                                            //
+//      This program is free software. It comes without any warranty, to the  //
+//      extent permitted by applicable law. You can redistribute it and/or    //
+//      modify it under the terms of the Do What The Fuck You Want To Public  //
+//      License, Version 2, as published by Sam Hocevar. See                  //
+//      http://sam.zoy.org/wtfpl/COPYING for more details.                    //
+//                                                                            //
+///////////////////////////////////////////////////////////////////////////////}
+
+program HarrysKaramjaFisher;
+{$DEFINE SMART}
+{$i SRL/SRL.scar}
+{$i Reflection/Reflection.simba}
+
+procedure DeclarePlayers;
+begin
+  HowManyPlayers := 1;
+  CurrentPlayer := 0;
+  NumberOfPlayers(HowManyPlayers);
+
+  with Players[0] do
+  begin
+    Name        := 'Username';
+    Pass        := 'Password';
+    Nick        := 'nickname';
+    Strings[1]  := 'auto'; // What fish to catch? Choices: 'lobster', 'harpoon', 'net', or 'auto'.
+    Member      := False;     //  Note: 'auto' choice will level net from level 1-39, then lobster cage from 40-99.
+    Active      := True;
+  end;
+
+end;
+
+const
+  SERVER  = 62;     // Enter "0" to pick a random server.
+  SIGNED  = True;  // Use the signed RS-client? Leave at True unless you know what you're doing.
+  MEMBERS = False; // Set to True if using a RS-Members account. False if F2P.
+  WORLD_SWITCH = True; // Switch world when connecting to RS?
+  WORLD_LEAVE = True; // Hop words every ~25 minutes or so. WORLD_SWITCH must be true.
+
+  Autochecken = True; // Automatically check for updates and download the newer version of the script if it gets updated.
+
+////////////////////////////////////////////////////////////////////////////////
+//                                                                            //
+//   End of Basic Setup - you may continue down more IF you know what you're  //
+//          doing. If not, you will probably break something!...              //
+//                                                                            //
+////////////////////////////////////////////////////////////////////////////////
+
+  MOUSE_SPEED              = 15;
+  MOUSE_SPEED_RANDOMNESS   = 7;
+  // Mouse speed will be "MOUSE_SPEED + Random(MOUSE_SPEED_RANDOMNESS);".
+
+  DebugMe = False; // Get advanced debugs of current procedures. Not suggested.
+
+////////////////////////////////////////////////////////////////////////////////
+//                                                                            //
+//   End of Advanced Setup - really, do NOT touch anything below this....     //
+//           or you will probably break something......... :)                 //
+//                                                                            //
+////////////////////////////////////////////////////////////////////////////////
+
+  SCRIPT_NAME        = 'Karamja Fisher';
+  SCRIPT_VERSION     = '0.9';
+  SECRET_GOOGLE_CODE = 'aD8aeeZD8izea'; // Ignore this.
+
+var FindFail,PlayerSessionTime,ReportTimer,FishCaughtGlobal,AntiBansGlobal,
+     WorldLeaveMarker,WorldsHopped : integer;
+
+function NotOnDock: boolean;
+var wTile: TPoint; LagTries: integer;
+begin
+  if (DistanceFrom(Tile(2924, 3180)) > 9) then // Tile is at end of dock.
+  begin
+    Writeln('Detected you off of dock - waiting a few seconds to know for sure.');
+    Wait(4000+Random(5000));
+    if R_FindRandoms then // Maybe you triggered a random?
+      Wait(10000+Random(5000)) // Anti-lag problems.
+    else
+      Wait(3000+Random(3000));
+    if (DistanceFrom(Tile(2924, 3180)) > 9) then
+      Result := True
+    else
+      Result := False;
+    if Result = False then
+      Exit;
+    if Result then
+    begin
+      WriteLn('You probably fell off the dock - let''s walk back onto it.');
+      wTile := TileToMM(Tile(2924, 3180));
+      if not rs_OnMiniMap(wTile.X, wTile.Y) then
+      begin
+        WriteLn('Tile doesn''t exist, o noes! Exiting.');
+        Result := True;
+        Exit;
+      end
+      else
+      begin
+        WriteLn('Tile found, walking to it.');
+        repeat
+          Inc(LagTries);
+          Mouse(wTile.x, wTile.y, 1, 1, true);
+          Wait(RandomRange(3000, 5000));
+        until (LagTries > 3) or (DistanceFrom(Tile(2924, 3180)) < 7);
+        if LagTries > 3 then
+        begin
+          WriteLn('Could not get back onto dock, we failed.');
+          Result := True;
+          Exit;
+        end
+        else
+        begin
+          WriteLn('We got back onto the dock, hell yeah!');
+          Result := False;
+          Exit;
+        end;
+      end;
+    end;
+  end else
+  begin
+    if DebugMe then WriteLn('You on dock!');
+    Result := False;
+  end;
+end;
+
+function hInvFull: Boolean; // n3s
+begin
+  if (not LoggedIn) or LobbyScreen then
+  begin
+    Result := False;
+    Exit;
+  end;
+  Result := (InvCount = 28);
+end;
+
+Function r_WebWalkH(T: TTile): Boolean; // JuKKa
+Var
+  I: Integer;
+  M, P: TPoint;
+  CTRLPoints: TPointArray;
+Begin
+  P := TileToPoint(T);
+  Repeat
+    M := GetMyPos;
+    CtrlPoints := r_WindPath(M.x, M.y, P.X, P.Y, 5.0, 2.5, 0.0, 0.0, 4.5, 2.5);
+    For I:= High(CtrlPoints) DownTo 0 Do
+      if WalkToTile(Tile(CtrlPoints[i].x, CtrlPoints[i].y),0, 10) Then
+      Begin
+        Result := I = High(CtrlPoints);
+        R_FindRandoms;
+        Break;
+      End;
+    R_FindRandoms;
+  Until( Result );
+End;
+
+procedure MakeNotes;
+var
+  NRoad,DockLoc,P: TPoint;
+  StileTile: TNPC;
+  srch, wtime: integer;
+begin
+  Wait(500+Random(2000));
+  WriteLn('Making notes!');
+  if (not FindNPC('tiles', StileTile)) then
+  begin
+    WriteLn('Failed to find Stile! This is bad.');
+    if not LoggedIn or LobbyScreen then
+    begin
+      if LobbyScreen then
+      begin
+        WriteLn('We are not logged in, but at lobby; we may not be lost! Nextplayer True');
+        LeaveLobby;
+        NextPlayer(True);
+        Exit;
+      end;
+      WriteLn('We are not logged in; we may not be lost! Nextplayer True');
+      LeaveLobby;
+      NextPlayer(True);
+      Exit;
+    end else
+    begin
+      WriteLn('We are hopelessly lost (when logged in)! Nextplayer False');
+      Players[CurrentPlayer].Rand := 'PlayerLost2';
+      NextPlayer(False);
+      Exit;
+    end;
+  end else
+  begin
+    for srch := 0 to 3 do
+    begin
+      P := TileToMS(StileTile.Tile, 614);
+      Mouse(P.X, P.Y, 5, 5, False);
+      if r_WaitOption('change', 1000) then
+      begin
+        R_FFlag(0);
+        WriteLn('Gotcha!');
+        IncEx(FishCaughtGlobal,26);
+        IncEx(Players[CurrentPlayer].Integers[1],26);
+        Wait(100+Random(2000));
+        if Random(3) > 1 then ClickToContinue;
+        Wait(10+Random(300));
+        Break;
+      end else
+        r_WaitOption('ancel', 500);
+    end;
+  end;
+  if hInvFull then
+  begin
+    wtime := 0;
+    while wtime < 50 do // 5 sec
+    begin
+      Wait(100);
+      inc(wtime);
+      WriteLn('Waiting a bit extra at Stiles.');
+      if not hInvFull then Break;
+    end;
+    Wait(10+Random(300));
+  end;
+  if not hInvFull then
+  begin
+    begin
+      WriteLn('Back to the dock!');
+      SetRun(True);
+      // Noter to North road
+      NRoad := intToPoint(2905+Random(10)-Random(10), 3172+Random(10)-Random(10));
+      r_WebWalkH(NRoad); // Make sure you don't waste time running around fence.
+      r_FFlag(20);
+      WriteLn('Got to road point, dock time!');
+      DockLoc := intToPoint(2924, 3180);
+      r_WebWalkH(DockLoc);
+      r_FFlag(10);
+      Wait(500+Random(4000));
+      NotOnDock;
+    end;
+  end;
+end;
+
+procedure HopelesslyLost;
+begin
+  if NotOnDock then
+  begin
+    if (DistanceFrom(Tile(2851, 3142)) < 15) then
+    begin
+      WriteLn('You are at Stiles! Please start script at dock next time.');
+      MakeNotes;
+      Exit;
+    end;
+    if not LoggedIn or LobbyScreen then
+    begin
+      WriteLn('Not logged in, might you be at lobby screen?');
+      if LobbyScreen then
+      begin
+        writeLn('Not logged in, but at lobby screen - there is a chance you''re not broken.');
+        writeLn('Probably not broken - nextplayer true.');
+        LeaveLobby;
+        NextPlayer(True);
+        Exit;
+      end;
+      writeLn('Not logged in - there is a chance you''re not broken.');
+      writeLn('Probably not broken - nextplayer true.');
+      NextPlayer(True);
+      Exit;
+    end else
+    begin
+      writeLn('Reflection tiles say you''re not near the fishing dock and logged in.');
+      writeLn('In random or broken; logging out for your saftey - nextplayer false.');
+      Players[CurrentPlayer].Rand := 'PlayerLost1';
+      nextPlayer(False);
+      Exit;
+    end;
+  end;
+end;
+
+
+procedure RandomRClickH; // phantombmx/EvilChicken - removed inv clicking
+var
+  M: Byte;
+  Inv: Boolean;
+begin
+  if (not LoggedIn) then exit;
+  M := MouseSpeed;
+  MouseSpeed := 7 + Random(25);
+  MouseBox(MSX1, MSY1, MIX2, MIY2, 2)
+  if (Random(3) > 0) then
+    Inv := ChooseOption('xamine');
+  if (not Inv) then ChooseOption('ancel');
+  MouseSpeed := M;
+end;
+
+procedure AntiBan_Short;
+begin
+  case (Random(400)) of
+    0: RandomRClickH;
+    1: MouseSpeed := MOUSE_SPEED + Random(MOUSE_SPEED_RANDOMNESS);
+    2: PickUpMouse;
+    3..400: begin
+      Wait(100 + Random(50));
+      Exit;
+    end;
+  end;
+  Inc(Players[CurrentPlayer].Integers[2]);
+  Inc(AntiBansGlobal);
+//  Inc(Stats_CustomVars[2]);
+end;
+
+function rInFight: boolean; // By Narcle
+var
+ T: Integer;
+begin
+  T := GetSystemTime + 2405;
+  if (not LoggedIn) or LobbyScreen then
+  begin
+    Result := False;
+    Exit;
+  end;
+  repeat
+    wait(66)
+    if (GetAnimation > -1) then
+      Result := true;
+  until Result or (GetSystemTime > T);
+end;
+
+function FindFishpool: Boolean;
+var
+  Pools: TNPCArray;
+  P: TPoint;
+  srch,FishFailsafe: integer;
+begin
+  Result := False;
+  if not LoggedIn or LobbyScreen then Exit;
+
+  Wait(50+Random(100));
+  R_FindRandoms;
+  AntiBan_Short;
+  ClickToContinue;
+  Players[CurrentPlayer].Integers[4] := R_GetSkillLevel(Skill_Fishing);
+
+  if WORLD_LEAVE then // Ugly, but was annoying with "True and is not needed" errors.
+    if (TimeFromMark(PlayerSessionTime) > WorldLeaveMarker) then
+    begin
+      WriteLn('Time''s up! Switching world.');
+  //    Inc(Stats_CustomVars[3]);
+      Inc(WorldsHopped);
+      if HowManyPlayers = 1 then
+        ChangeWorld(RandomWorld(Players[CurrentPlayer].Member, False))
+      else
+        NextPlayer(True);
+    end;
+
+  // Find what we want.
+  begin
+    if Players[CurrentPlayer].Strings[1] = 'auto' then
+    begin
+      if (not Players[CurrentPlayer].Booleans[2]) or (Players[CurrentPlayer].Strings[2] = '') then
+      begin
+        case R_GetSkillLevel(Skill_Fishing) of
+          1..39: //1..34: old
+          begin
+            Players[CurrentPlayer].Strings[2] := '323';
+            Players[CurrentPlayer].Strings[3] := 'Net Fishing';
+            Players[CurrentPlayer].Strings[4] := 'Net';
+          end;
+          {35..39: // Harpooning is buggy due to http://villavu.com/forum/showthread.php?t=61742 - removed for now.
+          begin
+            Players[CurrentPlayer].Strings[2] := '324';
+            Players[CurrentPlayer].Strings[3] := 'Harpoon Fishing';
+            Players[CurrentPlayer].Strings[4] := 'Harpoon';
+          end;}
+          40..99:
+          begin
+            Players[CurrentPlayer].Strings[2] := '324';
+            Players[CurrentPlayer].Strings[3] := 'Cage Fishing';
+            Players[CurrentPlayer].Strings[4] := 'Lobster pot';
+          end;
+          else begin
+            WriteLn('Failed to get level for AutoLevel! Exiting!');
+            Exit;
+          end;
+        end;
+
+        if (R_CountItemEx([Players[CurrentPlayer].Strings[4]]) < 1) then
+        begin
+          Wait(5000+Random(5000)); // Antilag
+          if (R_CountItemEx([Players[CurrentPlayer].Strings[4]]) < 1) then
+          begin
+            WriteLn('You need a '+Players[CurrentPlayer].Strings[4]+' to fish!');
+            WriteLn('Either set AutoLevel to False, or put this fishing tool into your inventory.');
+            Players[CurrentPlayer].Rand := 'MissingFishTools1';
+            NextPlayer(False);
+            Exit;
+          end else
+            Players[CurrentPlayer].Booleans[2] := True;
+        end else
+          Players[CurrentPlayer].Booleans[2] := True;
+      end;
+    end else
+    begin
+      case Players[CurrentPlayer].Strings[1] of
+        'lobster','cage':
+        begin
+          Players[CurrentPlayer].Strings[2] := '324';
+          Players[CurrentPlayer].Strings[3] := 'Cage Fishing';
+          Players[CurrentPlayer].Strings[4] := 'Lobster pot';
+        end;
+        'harpoon':
+        begin
+          Players[CurrentPlayer].Strings[2] := '324';
+          Players[CurrentPlayer].Strings[3] := 'Harpoon Fishing';
+          Players[CurrentPlayer].Strings[4] := 'Harpoon';
+        end;
+        'net':
+        begin
+          Players[CurrentPlayer].Strings[2] := '323';
+          Players[CurrentPlayer].Strings[3] := 'Net Fishing';
+          Players[CurrentPlayer].Strings[4] := 'Net';
+        end;
+      end;
+    end;
+  end;
+  begin
+    Pools := SortNPCs(GetNPCs(StrToInt(Players[CurrentPlayer].Strings[2])));
+    begin
+      if(rInFight)then exit;
+      for srch := 0 to 3 do // if reflection misclicks pool so it won't wait 2 seconds
+      begin
+        FindFail:=0;
+        try P := TileToMS(Pools[0].Tile, 232); // Thanks to N1ke for improv!
+          except begin WriteLn('Failed to find pool!'); Exit; end;
+        end;
+        Mouse(P.X, P.Y, 10, 10, False);
+        Result := R_WaitOption(Players[CurrentPlayer].Strings[3], 1000);
+        if (not Result) then
+        begin
+          r_WaitOption('ancel', 500);
+          Inc(FindFail);
+        end
+        else
+        begin
+          if (R_FlagExists) then
+            R_Flag;
+          MarkTime(FishFailsafe);
+          repeat
+            if DebugMe then writeLn('we fishin');
+            Wait(50+Random(100));
+            R_FindRandoms;
+            AntiBan_Short;
+            if not hInvFull then ClickToContinue;
+          until (not rInFight) or (TimeFromMark(FishFailsafe) > 180000) or (hInvFull); // 3 minutes
+          if hInvFull or (not loggedIn) or LobbyScreen then Exit;
+          if (TimeFromMark(FishFailsafe) > 180000) then
+          begin
+            writeLn('Took too long to catch something, breaking out!')
+            wait(3000+Random(10000));
+          end
+          else
+          begin
+            if DebugMe then writeLn('FISH HAS BEEN GRABBED');
+            wait(10+Random(1000));
+          end;
+          Exit;
+        end;
+      end;
+    end;
+  end;
+end;
+
+procedure DockToStile;
+var
+  NRoad,StileLoc: TPoint;
+begin
+  if hInvFull then
+  begin
+    case Players[CurrentPlayer].Strings[3] of
+      'Cage Fishing': R_DropItemsButEx([301,377,378]); // Lobster pot, raw lobster, noted raw lobster.
+      'Harpoon Fishing': R_DropItemsButEx([311,371,372,359,360,301]); // Harpoon, raw swordfish, noted raw swordfish, raw tuna, raw tuna noted, lobster pot.
+      'Net Fishing': R_DropItemsButEx([303,311,301,377,378,371,372,359,360]); // small fishing net, Harpoon, Lobster pot, raw lobster, noted raw lobster, raw swordfish, noted raw swordfish, raw tuna, raw tuna noted.
+      else writeLn('wat to drop?');
+    end;
+    if Players[CurrentPlayer].Strings[2] = '323' then // Netfish
+      Exit;
+    if NotOnDock then
+      Exit
+    else
+    begin
+      WriteLn('LOADSA NOTES');
+      Wait(100+Random(3000));
+      SetRun(True);
+      // Dock to Noter
+      NRoad := intToPoint(2905+Random(10)-Random(10), 3172+Random(10)-Random(10));
+      r_WebWalkH(NRoad); // Make sure you don't waste time running around fence.
+      r_FFlag(20);
+      WriteLn('Got to road point, Stile time!');
+      StileLoc := intToPoint(2851, 3142);
+      r_WebWalkH(StileLoc);
+      r_FFlag(0);
+      if (DistanceFrom(StileLoc) < 15) then
+      begin
+        WriteLn('We are at Stile, time to make delicious notes!');
+        MakeNotes;
+      end else
+      begin  // Lost to Stile from Road
+        WriteLn('We got lost on the way to Stile - oh crap!');
+        if not LoggedIn or LobbyScreen then
+        begin
+          WriteLn('Not logged in! Checking for lobby screen.');
+          if LobbyScreen then
+          begin
+            WriteLn('We are not logged in, but at lobby; we may not be lost! Nextplayer True');
+            LeaveLobby;
+            NextPlayer(True);
+            Exit;
+          end;
+          WriteLn('Not logged in; we may not be lost, nextplayer true');
+          NextPlayer(True);
+          Exit;
+        end else
+        begin
+          WriteLn('We are hopelessly lost! Nextplayer False');
+          Players[CurrentPlayer].Rand := 'PlayerLost3';
+          NextPlayer(False);
+          Exit;
+        end;
+      end;
+    end;
+  end;
+end;
+
+procedure PrintReports;
+var
+  QC: array [0..1] of TStringArray;
+  I, II: Byte;
+
+begin
+  //ClearDebug;
+  WriteLn('[REPORT]');
+  SRLRandomsReport;
+  //Stats_SendReport;
+  //Stats_ManageAccounts;
+  WriteLn('');
+
+  for II := 0 to 1 do
+    SetArrayLength(QC[II], 4);
+
+  QC[0] := ['Total runtime:',
+    'Players active:',
+    'Total fish noted:',
+    '-> Fish noted per hour:'];
+  QC[1] := [TimeRunning,
+    ToStr(PlayersActive) + ' out of ' + ToStr(HowManyPlayers),
+    ToStr(FishCaughtGlobal),
+    ToStr((3600 * (FishCaughtGlobal)) div (GetTimeRunning div 1000 + 1))];
+
+  WriteLn('<!---');
+  WriteLn('<! ' + Padr('Harry''s ' + SCRIPT_NAME, 32) + 'v' + SCRIPT_VERSION);
+  WriteLn('<!---');
+
+  II := High(QC[0]);
+  for I := 0 to II do
+    WriteLn('<! ' + Padr(QC[0][I], 32) + QC[1][I]);
+
+  WriteLn('<!---');
+  WriteLn('<! ## | Nick | A | Fished: | Fishing Lvl: | Rand:')
+
+  for I := 0 to HowManyPlayers - 1 do
+    WriteLn('<! ' + Padr(ToStr(I),                                 3) +
+      '| ' + Padr(Copy(Players[I].Nick, 1, 4),                     5) +
+      '| ' + Padr(ToStr(Players[I].Active)[1],                     2) +
+      '| ' + Padr(ToStr(Players[I].Integers[1]),           8) +
+      '| ' + Padr(ToStr(Players[I].Integers[4]), 13) +
+      '| ' + Players[I].Rand);
+
+  WriteLn('<! Total anti-ban procedures run: '+ inttostr(AntiBansGlobal));
+  if LoggedIn and not LobbyScreen then
+    WriteLn('<! There are '+ToStr(Length(GetAllPlayers))+' fellow botters fishing with you!');
+  if WORLD_LEAVE then
+    WriteLn('<! World-hop in: '+ tostr(((Worldleavemarker + PlayerSessionTime) - (GetSystemTime)) div 60000) +' minutes.');
+
+  WriteLn('<!---');
+  WriteLn('[/REPORT]');
+end;
+
+procedure Player_OnLogIn;
+begin
+  if (R_FindRandoms) then
+    if (not Players[CurrentPlayer].Active) then
+    begin
+      WriteLn('Player is in a random.');
+      LogOut;
+      Players[CurrentPlayer].Active := False;
+      Players[CurrentPlayer].Status := 'InRandom';
+      Exit;
+    end;
+
+  MarkTime(PlayerSessionTime);
+  WorldLeaveMarker := (2100000 + Random(1500000) - Random(1500000)); // 2100000 ms = 35 minutes. 1500000 ms = 25 minutes. Add and subtract the 25 minutes from 35 giving a huge change of randomness for world-switching.
+  //Writeln(tostr(worldleavemarker));
+  SetAngle(True);
+  SetRun(True);
+  Wait(2000+Random(2000));
+end;
+
+procedure Autoupdateme;
+var ClientUp, Neifile:integer;
+    OnlineVersion, NewScript, NeiFeilNennen:string;
+begin
+  if Autochecken then
+  begin
+    writeln('Checking for script updates...');
+    ClientUp := InitializeHTTPClient(False, False);
+    SetHTTPUserAgent(ClientUp,'Simba ' + SCRIPT_VERSION);
+    OnlineVersion := GetHTTPPage(ClientUp,'http://harry.lu/srl/fish-version.txt');
+    writeln(onlineversion);
+    writeln(script_version)
+    FreeHTTPClient(ClientUp);
+    if (Length(trim(OnlineVersion)) = 3) and (trim(OnlineVersion) > SCRIPT_VERSION) then
+    begin
+      writeLn('Newer script version online!');
+      writeLn('Autoupdating to newer version.');
+      ClientUp := InitializeHTTPClient(False,False);
+      SetHTTPUserAgent(ClientUp,'Simba');
+      NewScript := GetHTTPPage(ClientUp,'http://harry.lu/srl/fish-current.txt');
+      FreeHTTPClient(ClientUp);
+
+      NeiFeilNennen := AppPath + SCRIPT_NAME + ' v'+trim(OnlineVersion)+' [Pub] by Harry.simba';
+      Neifile := Rewritefile(NeiFeilNennen, true);
+      try
+        WriteFileString(Neifile, NewScript);
+      except
+        begin
+          writeLn('Fatal error writing to '+NeiFeilNennen+'!!');
+          terminatescript;
+        end;
+      end;
+      CloseFile(Neifile);
+      writeLn('New script downloaded and saved at '+NeiFeilNennen+' !! Please use this!');
+      TerminateScript;
+    end else
+    begin
+      if (Length(trim(OnlineVersion)) <> 3) then
+        WriteLn('Version checking failed (debug: length was not equal), you might be outdated.')
+        else writeLn('You have the latest version of the script!');
+      exit;
+    end;
+  end else
+    WriteLn('!!!!! Not checking for latest version, you may be outdated!');
+end;
+
+procedure SetUpScript;
+var
+  i,valid: Integer;
+begin
+  ClearDebug;
+
+  Smart_Server := SERVER;
+  Smart_Signed := SIGNED;
+  Smart_Members:= MEMBERS;
+
+  Autoupdateme;
+
+  SetUpSRL;
+  DeclarePlayers;
+  for valid := 0 to High(Players) do
+  begin
+    case Players[valid].Strings[1] of
+      'lobster','cage','harpoon','net','auto': Wait(1);
+      else
+      begin
+        WriteLn('Player '+inttostr(valid)+' has an invalid fish set! Please read the manual!');
+        TerminateScript;
+      end;
+    end;
+  end;
+  SetUpReflectionEx(True);
+
+  MouseSpeed := MOUSE_SPEED + Random(MOUSE_SPEED_RANDOMNESS);
+  SRL_Procs[srl_AntiBan] := @AntiBan_Short;
+  SRL_Procs[srl_OnLogIn] := @Player_OnLogIn;
+
+  for i := 0 to High(Players) do
+  begin
+    if (WORLD_SWITCH) then
+      Players[i].WorldInfo := [Players[i].Member, -1, False];
+    Players[i].Integers[4] := 1;
+  end;
+
+  ActivateClient;
+  Wait(1000 + Random(2000));
+end;
+
+procedure MainLoop;
+begin
+  LogInPlayer;
+
+  repeat
+    repeat
+      if(TimeFromMark(ReportTimer) > 60000)then // 1 minute
+      begin
+        PrintReports;
+        MarkTime(ReportTimer);
+      end;
+      HopelesslyLost;
+      FindFishpool;
+      if (not LoggedIn) or LobbyScreen then
+      begin
+        Wait(5000+Random(5000));
+        if (not LoggedIn) or LobbyScreen then Break else Wait(1);
+      end;
+      if hInvFull then DockToStile;
+    until (False);
+    if LobbyScreen then
+      LeaveLobby;
+
+    WriteLn('Detected as logged out, NPlayer');
+    NextPlayer(Players[CurrentPlayer].Active);
+  until False;
+end;
+
+begin
+  SetUpScript;
+  MainLoop;
+end.

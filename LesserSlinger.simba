@@ -1,0 +1,672 @@
+{///////////////////////////////////////////////////////////////////////////////
+//                                                                            //
+//                        Harry's Lesser Slinger v1.1                         //
+//                                                                            //
+//   Requirements:                                                            //
+//     Level 1 (or higher - 40+ suggested) Range OR Magic.                    //
+//     Have a sling OR an air staff equipped.                                 //
+//     Be in the tower room with the demon. (http://i.imgur.com/zqp9g.png)    //
+//     Edit the consts below (DeclarePlayers, basic setup.)                   //
+//     Latest Simba with latest SRL and Reflection.                           //
+//                                                                            //
+//   Features:                                                                //
+//     Slings (Range OR Mage exp) lesser deamons in the Wizards tower.        //
+//      (Wizards tower location: Island, South of Draynor, third floor.)      //
+//     QUALITY SCRIPT                                                         //
+//     Auto-updating!                                                         //
+//     Anti-ban modules.                                                      //
+//     World-switches every ~25 minutes.                                      //
+//     Can telegrab the rune med helm drops.                                  //
+//     Simple to setup and use!                                               //
+//     And much more!                                                         //
+//                                                                            //
+//   To-do features (not yet added):                                          //
+//     Level "goals" (change player when at level X, etc.)                    //
+//     Autoresponder                                                          //
+//     Some other suggestions? Post on the villavu.com thread!                //
+//                                                                            //
+//   Greets / thanks to the following:                                        //
+//     EvilChicken!   - ripped this script base off from his kebab buyer.     //
+//                             Also an awesome dude.                          //
+//     cstrike        - helped me quite a bit, awesome guy as well.           //
+//     bbri06         - indirectly got me interested in scripting again.      //
+//     SRL+Reflt Team - this would not be possible without you guys!          //
+//     You!           - downloading and (hopefully) giving feedback.          //
+//                                                                            //
+////////////////////////////////////////////////////////////////////////////////
+//                                                                            //
+//                              Changelog!                                    //
+//    0.1 - Initial release.                                                  //
+//    0.2 - Made demon finding a little bit better. Should be quicker.        //
+//            Won't switch worlds when time expires if you're alone in room.  //
+//            Makes sure you're inside the room at all times.                 //
+//    0.3 - Improved NPC finding more - now should not misclick as much.      //
+//            Fixed rare bug that happens when room door was opened.          //
+//    0.4 - Multiplayer is more efficient now. Time up will change player.    //
+//            Object finding is now 400% better thanks to N1ke.               //
+//            Now writing current level in the progress report.               //
+//    0.5 - Added failsafe to the inroom procedure.                           //
+//    0.6 - Relocate into demon room if you somehow fall out of it.           //
+//    0.7 - Magic attacking "supported". (Wind Rush, have air staff)          //
+//    0.8 - Telegrabs rune med helms if you are high enough mage.             //
+//    0.9 - Sneaky reflection update broke an internal command.               //
+//    1.0 - Another reflection update.                                        //
+//    1.1 - Silly small typo, fixed.                                          //
+//                                                                            //
+////////////////////////////////////////////////////////////////////////////////
+//                                                                            //
+//   Script License: WTFPL - Do What The Fuck You Want To Public License.     //
+//                                                                            //
+//      This program is free software. It comes without any warranty, to the  //
+//      extent permitted by applicable law. You can redistribute it and/or    //
+//      modify it under the terms of the Do What The Fuck You Want To Public  //
+//      License, Version 2, as published by Sam Hocevar. See                  //
+//      http://sam.zoy.org/wtfpl/COPYING for more details.                    //
+//                                                                            //
+///////////////////////////////////////////////////////////////////////////////}
+
+program LesserSlinger;
+{$DEFINE SMART}
+{$i SRL/SRL.scar}
+{$i Reflection/Reflection.simba}
+{$i SRL/SRL/skill/magic.scar}
+
+procedure DeclarePlayers;
+begin
+  HowManyPlayers := 1;
+  CurrentPlayer := 0;
+  NumberOfPlayers(HowManyPlayers);
+
+  with Players[0] do
+  begin
+    Name        := 'User';
+    Pass        := 'Pass';
+    Nick        := 'Nickname';
+    Booleans[1] := False; // Set to true if using Magic (wind rush).
+    Member      := False;
+    Active      := True;
+  end;
+
+end;
+
+const
+  SERVER  = 62;     // Enter "0" to pick a random server.
+  SIGNED  = True;  // Use the signed RS-client? Leave at True unless you know what you're doing.
+  MEMBERS = False; // Set to True if using a RS-Members account. False if F2P.
+  WORLD_SWITCH = True; // Switch world when connecting to RS?
+  WORLD_LEAVE = True; // Hop words every ~25 minutes or so. WORLD_SWITCH must be true.
+  PTele   = True; // Set to true to telegrab, if possible. Will not cast if your mage is too low/no runes.
+
+  Autochecken = True; // Automatically check for updates and download the newer version of the script if it gets updated.
+
+////////////////////////////////////////////////////////////////////////////////
+//                                                                            //
+//   End of Basic Setup - you may continue down more IF you know what you're  //
+//          doing. If not, you will probably break something!...              //
+//                                                                            //
+////////////////////////////////////////////////////////////////////////////////
+
+  MOUSE_SPEED              = 15;
+  MOUSE_SPEED_RANDOMNESS   = 7;
+  // Mouse speed will be "MOUSE_SPEED + Random(MOUSE_SPEED_RANDOMNESS);".
+
+  DebugMe = False; // Get advanced debugs of current procedures. Not suggested.
+
+////////////////////////////////////////////////////////////////////////////////
+//                                                                            //
+//   End of Advanced Setup - really, do NOT touch anything below this....     //
+//           or you will probably break something......... :)                 //
+//                                                                            //
+////////////////////////////////////////////////////////////////////////////////
+
+  SCRIPT_NAME        = 'Lesser Slinger';
+  SCRIPT_VERSION     = '1.1';
+  SECRET_GOOGLE_CODE = 'ZdKsasddErVs'; // Ignore this.
+
+  MaxOthers = 4; // Maximum number of people inside the demon room before you switch worlds.
+                 // Default (4) should work for most people.
+
+var FindFail,PlayerSessionTime,ReportTimer,DemonsPwnedGlobal,AntiBansGlobal,
+     WorldLeaveMarker,WorldsHopped : integer;
+
+function CheckForRandoms(CheckTime: Integer): Boolean;
+var
+  tiMark: Integer;
+begin
+  tiMark := GetTimeRunning;
+  repeat
+    Result := R_FindRandoms;
+    if (Result) then
+    begin
+      if (not Players[CurrentPlayer].Active) then
+      begin
+        Players[CurrentPlayer].Status := 'InRandom';
+        WriteLn('Failed to solve "' + Players[CurrentPlayer].Rand + '" random.');
+        LogOut;
+        Players[CurrentPlayer].Active := False;
+        WriteLn('Your account is most likely still inside the random.');
+        WriteLn('If you''d like to help SRL, please borrow your account to a SRL developer.');
+      end;
+      Exit;
+    end;
+    Wait(100 + Random(Round(100 * 1.3)));
+  until (TimeFromMark(tiMark) > CheckTime);
+end;
+
+function NotInDemonRoom: boolean;
+var wTile: TPoint; LagTries: integer;
+begin
+  if (DistanceFrom(Tile(3110, 3160)) > 3) then // Tile is inside demon room // or (GetPlaneIndex <> 3)
+  begin
+    Writeln('Detected you outside of demon room - waiting a few seconds to know for sure.');
+    Wait(500+Random(1000));
+    R_FindRandoms; // Maybe you triggered a random?
+    Wait(3000+Random(3000)); // Anti-lag problems.
+    if (DistanceFrom(Tile(3110, 3160)) > 3) then
+      Result := True
+    else
+      Result := False;
+    if Result = False then
+      Exit;
+    if Result then
+    begin // Booooom helped a bit here when I was lazy ;)
+      WriteLn('You probably fell out of the room - let''s walk back in.');
+      wTile := TileToMM(Tile(3110, 3160));
+      if not rs_OnMiniMap(wTile.X, wTile.Y) then
+      begin
+        WriteLn('Tile doesn''t exist, o noes! Exiting.');
+        Result := True;
+        Exit;
+      end
+      else
+      begin
+        WriteLn('Tile found, walking to it.');
+        repeat
+          Inc(LagTries);
+          Mouse(wTile.x, wTile.y, 1, 1, true);
+          Wait(RandomRange(3000, 5000));
+        until (LagTries > 3) or (DistanceFrom(Tile(3110, 3160)) < 3);
+        if LagTries > 3 then
+        begin
+          WriteLn('Could not get back into room, oh noes, we failed.');
+          Result := True;
+          Exit;
+        end
+        else
+        begin
+          WriteLn('We got back into the room, hell yeah!');
+          Result := False;
+          Exit;
+        end;
+      end;
+    end;
+  end else
+  Result := False;
+end;
+
+procedure RandomRClickH; // phantombmx/EvilChicken - removed inv clicking
+var
+  M: Byte;
+  Inv: Boolean;
+begin
+  if (not LoggedIn) then exit;
+  M := MouseSpeed;
+  MouseSpeed := 7 + Random(25);
+  MouseBox(MSX1, MSY1, MIX2, MIY2, 2)
+  if (Random(3) > 0) then
+    Inv := ChooseOption('xamine');
+  if (not Inv) then ChooseOption('ancel');
+  MouseSpeed := M;
+end;
+
+procedure AntiBan_Short;
+begin
+  case (Random(400)) of
+    0: RandomRClickH;
+    1: MouseSpeed := MOUSE_SPEED + Random(MOUSE_SPEED_RANDOMNESS);
+    2: PickUpMouse;
+    3..400: begin
+      Wait(100 + Random(50));
+      Exit;
+    end;
+  end;
+  Inc(Players[CurrentPlayer].Integers[2]);
+  Inc(AntiBansGlobal);
+//  Inc(Stats_CustomVars[2]);
+end;
+
+function rInFight: boolean; // By Narcle
+var
+ T: Integer;
+begin
+  T := GetSystemTime + 2405;
+  repeat
+    wait(66)
+    if (GetAnimation > -1) then
+      Result := true;
+  until Result or (GetSystemTime > T);
+end;
+
+function PlayersAround: integer;
+var
+  OtherPlayers: array of TPlayer;
+begin
+  OtherPlayers := GetAllPlayers;
+  if (not(WORLD_LEAVE)) then
+    Result := 0
+  else
+    Result := (Length(OtherPlayers));
+end;
+
+function ClickTele: boolean;
+begin
+  if not LoggedIn then Exit;
+  if GameTab(tab_Magic) then
+  begin
+    Wait(100+Random(200));
+    MouseBox(614,295,629,307,1);
+    Wait(50+Random(200));
+    Result := True;
+  end else
+  begin
+    WriteLn('Failed to gametab to magic.');
+    Exit;
+  end;
+end;
+
+procedure TeleHelms;
+var
+  items: TGroundItemArray;
+  TempMS: TPoint;
+  iPad: integer;
+begin
+  if not LoggedIn then Exit;
+  setlength(items, 0);
+  if not PTele then
+  begin
+    if DebugMe then WriteLn('DEBUG: No Telegrab (PTele=False)');
+    Exit;
+  end;
+  if (R_GetSkillLevel(Skill_Magic) < 32) then
+  begin
+    if DebugMe then WriteLn('DEBUG: Too low level');
+    Exit;
+  end;
+  if (R_CountItemEx(['Law rune']) < 1) then
+  begin
+    if DebugMe then WriteLn('DEBUG: No law rune.');
+    Exit;
+  end;
+  if InvFull then
+  begin
+    if DebugMe then WriteLn('DEBUG: Inv full.');
+    Exit;
+  end;
+
+  Items := GetItemsNear(6);
+  if GetArrayLength(Items) > 0 then
+  begin
+    for iPad := 0 to high(items) do
+    if items[iPad].ID = 1147 then // Rune med helm ID 1147
+    begin
+      if ClickTele then
+      begin
+        TempMS := TileToMSEx(Items[iPad].Tile, 0.5, 0.5, 0);
+        Mouse(TempMS.X, TempMS.Y, 5, 5, false);
+        if R_WaitOption('une med helm', 1000) then
+          WriteLn('Got helm!')
+        else
+          WriteLn('Failed to grab helm. sadfrog.');
+        Wait(1000+Random(2000));
+      end else
+        WriteLn('DEBUG: Could not cast telegrab!');
+    end;
+  end;
+end;
+
+function FindDemon: Boolean;
+var
+  LesserDemon: TNPC;
+  P: TPoint;
+  srch,FightFailsafe: integer;
+begin
+  Result := False;
+  if not LoggedIn then Exit;
+
+  Wait(50+Random(100));
+  R_FindRandoms;
+  AntiBan_Short;
+  ClickToContinue;
+  if Players[CurrentPlayer].Booleans[1] then
+    Players[CurrentPlayer].Integers[4] := R_GetSkillLevel(Skill_Magic)
+  else
+    Players[CurrentPlayer].Integers[4] := R_GetSkillLevel(Skill_Range);
+
+  if (PlayersAround > MaxOthers) then
+  begin
+    WriteLn('Detected too many players (more than '+tostr(MaxOthers)+'). Edit MaxOthers in the script to change this limit.');
+//    Inc(Stats_CustomVars[3]);
+    Inc(WorldsHopped);
+    ChangeWorld(RandomWorld(Players[CurrentPlayer].Member, False));
+  end;
+
+  if WORLD_LEAVE then // Ugly, but was annoying with "True and is not needed" errors.
+    if (TimeFromMark(PlayerSessionTime) > WorldLeaveMarker) then
+      if (PlayersAround > 1) then
+      begin
+        WriteLn('Time''s up! Switching world.');
+    //    Inc(Stats_CustomVars[3]);
+        Inc(WorldsHopped);
+        if HowManyPlayers = 1 then
+          ChangeWorld(RandomWorld(Players[CurrentPlayer].Member, False))
+        else
+          NextPlayer(True);
+      end;
+
+  // Yeah, I used the name instead of an ID. There are SOMETIMES
+  // different lesser-demon IDs, so deal with it.
+  if NotInDemonRoom then
+  begin
+    if R_LoggedIn then begin
+      writeLn('Reflection tiles say you''re not inside the demon room.');
+      writeLn('In random or broken; logging out for your saftey - nextplayer false.');
+      nextPlayer(False);
+    end else
+    begin
+      writeLn('Not logged in - there is a chance you''re not broken.');
+      writeLn('Probably not broken - nextplayer true.');
+      nextPlayer(True);
+    end;
+  end;
+  begin
+    if (not FindNPC('esser demon', LesserDemon)) then
+    begin
+      wait(50);
+      FindFail := FindFail+1;
+    end else
+    begin
+      if(rInFight)then exit;
+      for srch := 0 to 2 do // if reflection misclicks demon so it won't wait 2 seconds
+      begin
+        FindFail:=0;
+        FindNPC('esser demon', LesserDemon); // Rehash location - should help with misclicks.
+        P := TileToMSEx(LesserDemon.Tile, 0, 0, 200+Random(300)); // Thanks to N1ke for improv!
+        Mouse(P.X - Random(3), P.Y - Random(3), 3, 3, False);
+        Result := r_WaitOption('ttack', 500);
+        if (not Result) then
+        begin
+          r_WaitOption('ancel', 500);
+          if (not FindNPC('esser demon', LesserDemon)) then
+          begin
+            writeln('Demon not found, he probably died.');
+            wait(5000+random(2000)); // not found it? he is obviously dead and script trying to attack non-existant demon.
+            exit;
+          end;
+        end
+        else
+        begin
+          Inc(Players[CurrentPlayer].Integers[1]);
+          Inc(DemonsPwnedGlobal);
+          //Inc(Stats_CustomVars[1]);
+          if (R_FlagExists) then
+            R_Flag;
+          MarkTime(FightFailsafe);
+          repeat
+            if DebugMe then writeLn('we fightin');
+            Wait(50+Random(100));
+            R_FindRandoms;
+            AntiBan_Short;
+            ClickToContinue;
+          until (not rInFight) or (TimeFromMark(FightFailsafe) > 180000); // 3 minutes
+          if (TimeFromMark(FightFailsafe) > 180000) then writeLn('Took too long to kill, breaking out!')
+          else
+          begin
+            if DebugMe then writeLn('BEAST HAS BEEN SLAIN');
+            wait(4000+Random(3000)); // wait for body to disapear
+          end;
+          Exit;
+        end;
+      end;
+    end;
+  end;
+end;
+
+procedure PrintReports;
+var
+  QC: array [0..1] of TStringArray; // Query = 0, Counter = 1.
+  I, II: Byte;
+
+begin
+  //ClearDebug;
+  WriteLn('[REPORT]');
+  SRLRandomsReport;
+  //Stats_SendReport;
+  //Stats_ManageAccounts;
+  WriteLn('');
+
+  for II := 0 to 1 do
+    SetArrayLength(QC[II], 4);
+
+  QC[0] := ['Total runtime:',
+    'Players active:',
+    'Total demons attacked:',
+    '-> Demons attacked per hour:'];
+  QC[1] := [TimeRunning,
+    ToStr(PlayersActive) + ' out of ' + ToStr(HowManyPlayers),
+    ToStr(DemonsPwnedGlobal),
+    ToStr((3600 * (DemonsPwnedGlobal)) div (GetTimeRunning div 1000 + 1))];
+
+  WriteLn('<!---');
+  WriteLn('<! ' + Padr('Harry''s ' + SCRIPT_NAME, 32) + 'v' + SCRIPT_VERSION);
+  WriteLn('<!---');
+
+  II := High(QC[0]);
+  for I := 0 to II do
+    WriteLn('<! ' + Padr(QC[0][I], 32) + QC[1][I]);
+
+  WriteLn('<!---');
+  if Players[CurrentPlayer].Booleans[1] then
+    WriteLn('<! ## | Nick | A | Attckd: | Magic Level: | Rand:')
+  else
+    WriteLn('<! ## | Nick | A | Attckd: | Range Level: | Rand:');
+
+  for I := 0 to HowManyPlayers - 1 do
+    WriteLn('<! ' + Padr(ToStr(I),                                 3) +
+      '| ' + Padr(Copy(Players[I].Nick, 1, 4),                     5) +
+      '| ' + Padr(ToStr(Players[I].Active)[1],                     2) +
+      '| ' + Padr(ToStr(Players[I].Integers[1]),           8) +
+      '| ' + Padr(ToStr(Players[I].Integers[4]), 13) +
+      '| ' + Players[I].Rand);
+
+  WriteLn('<! Total anti-ban procedures run: '+ inttostr(AntiBansGlobal));
+  if WORLD_LEAVE then
+  begin
+    WriteLn('World-hop in: '+ tostr(((Worldleavemarker + PlayerSessionTime) - (GetSystemTime)) div 60000) +' minutes.');
+    if (PlayersAround < 2) then
+      WriteLn('You are alone on this world, not hopping until someone else comes around!');
+  end;
+//  if Stats_ID = '' then
+//    WriteLn('<! PLEASE GET A STATS ACCOUNT AT http://scriptmanager.freehostia.com/ AND CONFIGURE IT INTO THE SCRIPT!');
+//  if Stats_PW = '' then
+//    WriteLn('<! PLEASE GET A STATS ACCOUNT AT http://scriptmanager.freehostia.com/ AND CONFIGURE IT INTO THE SCRIPT!');
+  WriteLn('<!---');
+  WriteLn('[/REPORT]');
+end;
+
+function CastH(Spell: string; AutoCast: Boolean): Boolean; // By N1ke
+var
+  X, Y: Integer;
+  B: TBox;
+  SInfo: TSpell;
+begin
+  if not LoggedIn then
+    Exit;
+
+  SInfo := GetSpellInfo(Spell);
+  if AutoCast then
+   if not SInfo.AutoCast then
+   begin
+     srl_Warn('Cast', Spell + ' is not autocast-able', warn_AllVersions);
+     Exit;
+   end;
+
+  if not SpellAvailable(B, Spell) then
+    Exit;
+
+//  Mousebox(B.X1, B.Y1, B.X2, B.Y2, 3);
+  GetMousePos(X, Y);
+  if AutoCast then
+  begin
+    if not WaitUpText('Autocast', 120+Random(100)) then
+      Exit;
+
+    if not(CountColor(16711422, B.X1-10, B.Y1-10, B.X2+10, B.Y2+10) > 50) then
+    begin
+      Mouse(X, Y, 0, 0, True);
+      Result := True;
+    end else
+      Result := True;
+    Exit;
+  end;
+
+  Mouse(X, Y, 0, 0, not SInfo.AutoCast);
+  if SInfo.AutoCast then
+    Result := WaitOption('Cast', 1000+Random(100))
+  else
+    Result := WaitUpText('Cast', 1000+Random(100));
+end;
+
+procedure Player_OnLogIn;
+begin
+  if (R_FindRandoms) then
+    if (not Players[CurrentPlayer].Active) then
+    begin
+      WriteLn('Player is in a random.');
+      LogOut;
+      Players[CurrentPlayer].Active := False;
+      Players[CurrentPlayer].Status := 'InRandom';
+      Exit;
+    end;
+
+  MarkTime(PlayerSessionTime);
+  WorldLeaveMarker := (2100000 + Random(1500000) - Random(1500000)); // 2100000 ms = 35 minutes. 1500000 ms = 25 minutes. Add and subtract the 25 minutes from 35 giving a huge change of randomness for world-switching.
+  //Writeln(tostr(worldleavemarker));
+  SetAngle(True);
+  SetRun(True);
+  if Players[CurrentPlayer].Booleans[1] then
+    if CastH('wind rush', true) then
+      writeLn('Magic loaded!')
+    else
+    begin
+      WriteLn('Magic failed to load - if you are not a wizard, edit the DeclarePlayers!');
+      Players[CurrentPlayer].Status := 'MagicFail';
+      NextPlayer(False);
+    end;
+end;
+
+procedure Autoupdateme;
+var ClientUp, Neifile:integer;
+    OnlineVersion, NewScript, NeiFeilNennen:string;
+begin
+  if Autochecken then
+  begin
+    writeln('Checking for script updates...');
+    ClientUp := InitializeHTTPClient(False, False);
+    SetHTTPUserAgent(ClientUp,'Simba ' + SCRIPT_VERSION);
+    OnlineVersion := GetHTTPPage(ClientUp,'http://harry.lu/srl/sling-version.txt');
+    writeln(onlineversion);
+    writeln(script_version)
+    FreeHTTPClient(ClientUp);
+    if (Length(trim(OnlineVersion)) = 3) and (trim(OnlineVersion) > SCRIPT_VERSION) then
+    begin
+      writeLn('Newer script version online!');
+      writeLn('Autoupdating to newer version.');
+      ClientUp := InitializeHTTPClient(False,False);
+      SetHTTPUserAgent(ClientUp,'Simba');
+      NewScript := GetHTTPPage(ClientUp,'http://harry.lu/srl/sling-current.txt');
+      FreeHTTPClient(ClientUp);
+
+      NeiFeilNennen := AppPath + SCRIPT_NAME + ' v'+trim(OnlineVersion)+' [Pub] by Harry.simba';
+      Neifile := Rewritefile(NeiFeilNennen, true);
+      try
+        WriteFileString(Neifile, NewScript);
+      except
+        begin
+          writeLn('Fatal error writing to '+NeiFeilNennen+'!!');
+          terminatescript;
+        end;
+      end;
+      CloseFile(Neifile);
+      writeLn('New script downloaded and saved at '+NeiFeilNennen+' !! Please use this!');
+      TerminateScript;
+    end else
+    begin
+      if (Length(trim(OnlineVersion)) <> 3) then
+        WriteLn('Version checking failed (debug: length was not equal), you might be outdated.')
+        else writeLn('You have the latest version of the script!');
+      exit;
+    end;
+  end else
+    WriteLn('!!!!! Not checking for latest version, you may be outdated!');
+end;
+
+procedure SetUpScript;
+var
+  i: Integer;
+begin
+  ClearDebug;
+
+//  if Stats_ID = '' then
+//    WriteLn('Please get a stats account at http://scriptmanager.freehostia.com/ and configure it into the script!');
+
+//  Stats_UserID   := Stats_ID;
+//  Stats_Password := Stats_PW;
+  //Stats_ScriptID := '89';
+
+  Smart_Server := SERVER;
+  Smart_Signed := SIGNED;
+  Smart_Members:= MEMBERS;
+
+  Autoupdateme;
+
+  SetUpSRL;
+  DeclarePlayers;
+  SetUpReflectionEx(True);
+
+  MouseSpeed := MOUSE_SPEED + Random(MOUSE_SPEED_RANDOMNESS);
+  SRL_Procs[srl_AntiBan] := @AntiBan_Short;
+  SRL_Procs[srl_OnLogIn] := @Player_OnLogIn;
+
+  for i := 0 to High(Players) do
+  begin
+    if (WORLD_SWITCH) then
+      Players[i].WorldInfo := [Players[i].Member, -1, False];
+    Players[i].Integers[4] := 1;
+  end;
+
+  ActivateClient;
+  Wait(1000 + Random(2000));
+end;
+
+procedure MainLoop;
+begin
+  LogInPlayer;
+
+  repeat
+    repeat
+      FindDemon;
+      TeleHelms;
+      if(TimeFromMark(ReportTimer) > 60000)then // 1 minute
+      begin
+        PrintReports;
+        MarkTime(ReportTimer);
+      end;
+    until (not R_LoggedIn);
+    NextPlayer(Players[CurrentPlayer].Active);
+  until False;
+end;
+
+begin
+  SetUpScript;
+  MainLoop;
+end.
