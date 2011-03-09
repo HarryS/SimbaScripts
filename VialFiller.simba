@@ -1,0 +1,922 @@
+{///////////////////////////////////////////////////////////////////////////////
+//                                                                            //
+//                          Harry's Vial Filler v0.2                          //
+//                                                                            //
+//   Requirements:                                                            //
+//     None!                                                                  //
+//     Have tons of empty vials in your bank - first or second slot ideally.  //
+//     Start in Varrock EAST bank. (http://i.imgur.com/D442K.png)             //
+//     Edit the consts below (DeclarePlayers, basic setup.)                   //
+//     Latest Simba with latest SRL and Reflection.                           //
+//                                                                            //
+//   Features:                                                                //
+//     Fills up empty vials with water to make money.                         //
+//     In the rare chance you die, will death-walk back to Falador.           //
+//     Script is designed to "never stop", should run until a random breaks.  //
+//     QUALITY SCRIPT                                                         //
+//     Auto-updating!                                                         //
+//     Anti-ban modules.                                                      //
+//     World-switches every ~25 minutes.                                      //
+//     Simple to setup and use!                                               //
+//     And much more!                                                         //
+//                                                                            //
+//   Future features (not yet added):                                         //
+//     Selling full vials and buying more at GE.                              //
+//     Suggest something on the forums!                                       //
+//                                                                            //
+////////////////////////////////////////////////////////////////////////////////
+//                                                                            //
+//                              Changelog!                                    //
+//    0.1 - Initial release.                                                  //
+//    0.2 - Removal of TRSObjects due to memleaks.                            //
+//                                                                            //
+////////////////////////////////////////////////////////////////////////////////
+//                                                                            //
+//   Script License: WTFPL - Do What The Fuck You Want To Public License.     //
+//                                                                            //
+//      This program is free software. It comes without any warranty, to the  //
+//      extent permitted by applicable law. You can redistribute it and/or    //
+//      modify it under the terms of the Do What The Fuck You Want To Public  //
+//      License, Version 2, as published by Sam Hocevar. See                  //
+//      http://sam.zoy.org/wtfpl/COPYING for more details.                    //
+//                                                                            //
+///////////////////////////////////////////////////////////////////////////////}
+
+program HarrysVarrockVialFiller;
+{$DEFINE SMART}
+{$i SRL/SRL.scar}
+{$i Reflection/Reflection.simba}
+{$i SRL/SRL/Skill/Magic.scar}
+{$i SRL/SRL/Misc/Stats.simba}
+
+procedure DeclarePlayers;
+begin
+  HowManyPlayers := 1;
+  CurrentPlayer := 0;
+  NumberOfPlayers(HowManyPlayers);
+
+  with Players[0] do
+  begin
+    Name        := 'Username';
+    Pass        := 'Password';
+    Nick        := 'nickname';
+    Pin         := '1337'; // Bank Pin - leave alone if you don't have one.
+    Member      := False;
+    Active      := True;
+  end;
+
+end;
+
+const
+  SERVER  = 61;     // Enter "0" to pick a random server.
+  SIGNED  = True;  // Use the signed RS-client? Leave at True unless you know what you're doing.
+  MEMBERS = False; // Set to True if using a RS-Members account. False if F2P.
+  WORLD_SWITCH = True; // Switch world when connecting to RS?
+  WORLD_LEAVE = True; // Hop words every ~25 minutes or so. WORLD_SWITCH must be true.
+
+  Autochecken = True; // Automatically check for updates and download the newer version of the script if it gets updated.
+
+  SRLStats_Username = ''; // Your SRL Stats Username (not RS!)
+  SRLStats_Password = ''; // Your SRL Stats Password (not RS!)
+
+////////////////////////////////////////////////////////////////////////////////
+//                                                                            //
+//   End of Basic Setup - you may continue down more IF you know what you're  //
+//          doing. If not, you will probably break something!...              //
+//                                                                            //
+////////////////////////////////////////////////////////////////////////////////
+
+  MOUSE_SPEED              = 15;
+  MOUSE_SPEED_RANDOMNESS   = 7;
+  // Mouse speed will be "MOUSE_SPEED + Random(MOUSE_SPEED_RANDOMNESS);".
+
+  DebugMe = False; // Get advanced debugs of current procedures. Not suggested.
+
+////////////////////////////////////////////////////////////////////////////////
+//                                                                            //
+//   End of Advanced Setup - really, do NOT touch anything below this....     //
+//           or you will probably break something......... :)                 //
+//                                                                            //
+////////////////////////////////////////////////////////////////////////////////
+
+  SCRIPT_NAME        = 'Vial Filler';
+  SCRIPT_VERSION     = '0.2';
+  SECRET_GOOGLE_CODE = 'D8zw2o0db8s2'; // Ignore this.
+
+var PlayerSessionTime,ReportTimer,AntiBansGlobal, VialsFilledGlobal,
+     WorldLeaveMarker,WorldsHopped, DethWelks, StatsTimer, AtkFasf, notcooldood : integer;
+
+Function r_WebWalkH(T: TTile): Boolean; // JuKKa
+Var
+  I: Integer;
+  M, P: TPoint;
+  CTRLPoints: TPointArray;
+Begin
+  P := TileToPoint(T);
+  if DistanceFrom(P) < 4 then
+  begin
+    WriteLn('Located close enough to tile, unable to webwalk!');
+    Exit;
+  end;
+  Repeat
+    M := GetMyPos;
+    CtrlPoints := r_WindPath(M.x, M.y, P.X, P.Y, 5.0, 2.5, 0.0, 0.0, 4.5, 2.5);
+    For I:= High(CtrlPoints) DownTo 0 Do
+      if WalkToTile(Tile(CtrlPoints[i].x, CtrlPoints[i].y),0, 10) Then
+      Begin
+        Result := I = High(CtrlPoints);
+        R_FindRandoms;
+        Break;
+      End;
+    R_FindRandoms;
+  Until( Result );
+End;
+
+function NotSafeZone: boolean;
+var wTile: TPoint; LagTries,ee: integer;
+begin
+  if (DistanceFrom(Tile(3253,3421)) > 35) then
+  begin
+    Writeln('Detected you away from Varrock East - waiting a few seconds to know for sure.');
+    Wait(2000+Random(5000));
+    if R_FindRandoms then // Maybe you triggered a random?
+      Wait(10000+Random(5000)) // Anti-lag problems.
+    else
+      Wait(1000+Random(3000));
+    if (DistanceFrom(Tile(3253,3421)) > 35) then
+      Result := True
+    else
+      Result := False;
+    if Result = False then
+      Exit;
+    if Result then
+    begin
+      WriteLn('You probably ran away from Varrock East - let''s walk back to it.');
+      wTile := TileToMM(Tile(3253,3421));
+      if not rs_OnMiniMap(wTile.X, wTile.Y) then
+      begin
+        WriteLn('Tile doesn''t exist, o noes! Might you be in lubmy?');
+        Result := True;
+        if (DistanceFrom(Tile(3222,3219)) < 50) then
+        begin
+          WriteLn('You are in the Lubmy area. Let''s walk back to the bank.');
+          // Deathwalk stuff.
+          for ee := 1 to 3 do
+            R_ClickItem(ee, True, '');
+          Inc(DethWelks);
+          R_WebWalkH(Tile(3239, 3225)); // Lumby east int
+          r_FFlag(0);
+          R_WebWalkH(Tile(3259, 3229)); // Desert border
+          r_FFlag(5+Random(5)-Random(5));
+          R_WebWalkH(Tile(3238, 3283)); // North of Lumby cows
+          r_FFlag(5+Random(5)-Random(5));
+          R_WebWalkH(Tile(3241, 3309)); // Cows North 2x
+          r_FFlag(5+Random(5)-Random(5));
+          R_WebWalkH(Tile(3298, 3357)); // SE VEM
+          r_FFlag(5+Random(5)-Random(5));
+          R_WebWalkH(Tile(3286, 3428)); // E Varrock
+          r_FFlag(5+Random(5)-Random(5));
+          R_WebWalkH(Tile(3253, 3428)); // VEB enter
+          r_FFlag(0);
+          SetAngle(True);
+          WriteLn('How does I reflection deathwalk? :D');
+          if (DistanceFrom(Tile(3253, 3428)) < 35) then
+            Result := False
+          else
+            Result := True;
+          Exit;
+        end;
+        if TabExists(Tab_Magic) then
+        begin
+          WriteLn('We have the power to teleabort!');
+          GameTab(Tab_Magic);
+          Cast('lumbridge home teleport', False);
+          Wait(2000+Random(2000));
+          if IsChatBoxTextAnyLine('another',0) then
+          begin
+            WriteLn('Teleabort timer-blocked! Other user can take the lead.');
+            Result := False;
+            NextPlayer(True);
+            Exit;
+          end;
+          Wait(15000+Random(10000));
+          WriteLn('(Probably) back in lumby via teleport!');
+          if (DistanceFrom(Tile(3222,3219)) < 50) then
+          begin
+            Inc(DethWelks);
+            R_WebWalkH(Tile(3239, 3225)); // Lumby east int
+            r_FFlag(0);
+            R_WebWalkH(Tile(3259, 3229)); // Desert border
+            r_FFlag(5+Random(5)-Random(5));
+            R_WebWalkH(Tile(3238, 3283)); // North of Lumby cows
+            r_FFlag(5+Random(5)-Random(5));
+            R_WebWalkH(Tile(3241, 3309)); // Cows North 2x
+            r_FFlag(5+Random(5)-Random(5));
+            R_WebWalkH(Tile(3298, 3357)); // SE VEM
+            r_FFlag(5+Random(5)-Random(5));
+            R_WebWalkH(Tile(3286, 3428)); // E Varrock
+            r_FFlag(5+Random(5)-Random(5));
+            R_WebWalkH(Tile(3253, 3428)); // VEB enter
+            r_FFlag(0);
+            WriteLn('How does I reflection deathwalk?');
+            SetAngle(True);
+          end;
+          Result := False;
+          Exit;
+        end;
+        Exit;
+      end
+      else
+      begin
+        WriteLn('Tile found, walking to it.');
+        repeat
+          Inc(LagTries);
+          Mouse(wTile.x, wTile.y, 1, 1, true);
+          Wait(RandomRange(3000, 5000));
+        until (LagTries > 3) or (DistanceFrom(Tile(3253,3421)) < 7);
+        if LagTries > 3 then
+        begin
+          WriteLn('Could not get back to le bank, we failed.');
+          Result := True;
+          Exit;
+        end
+        else
+        begin
+          WriteLn('We got back to the bank, hell yeah!');
+          Result := False;
+          Exit;
+        end;
+      end;
+    end;
+  end else
+  begin
+    if DebugMe then WriteLn('You be there!');
+    Result := False;
+  end;
+end;
+
+function hInvFull: Boolean; // n3s
+begin
+  if (not LoggedIn) or LobbyScreen then
+  begin
+    Result := False;
+    Exit;
+  end;
+  Result := (InvCount = 28);
+end;
+
+procedure HopelesslyLost;
+begin
+  if NotSafeZone then
+  begin
+    if not LoggedIn or LobbyScreen then
+    begin
+      WriteLn('Not logged in, might you be at lobby screen?');
+      if LobbyScreen then
+      begin
+        writeLn('Not logged in, but at lobby screen - there is a chance you''re not broken.');
+        writeLn('Probably not broken - nextplayer true.');
+        LeaveLobby;
+        NextPlayer(True);
+        Exit;
+      end;
+      writeLn('Not logged in - there is a chance you''re not broken.');
+      writeLn('Probably not broken - nextplayer true.');
+      NextPlayer(True);
+      Exit;
+    end else
+    begin
+      writeLn('Reflection tiles say you''re not near Falador and logged in.');
+      writeLn('In random or broken; logging out for your saftey - nextplayer false.');
+      Players[CurrentPlayer].Rand := 'PlayerLost1';
+      nextPlayer(False);
+      Exit;
+    end;
+  end;
+end;
+
+procedure RandomRClickH; // phantombmx/EvilChicken - removed inv clicking
+var
+  M: Byte;
+  Inv: Boolean;
+begin
+  if (not LoggedIn) then exit;
+  M := MouseSpeed;
+  MouseSpeed := 7 + Random(25);
+  MouseBox(MSX1, MSY1, MIX2, MIY2, 2)
+  if (Random(3) > 0) then
+    Inv := ChooseOption('xamine');
+  if (not Inv) then ChooseOption('ancel');
+  MouseSpeed := M;
+end;
+
+procedure AntiBan_Short;
+begin
+  case (Random(400)) of
+    0: RandomRClickH;
+    1: MouseSpeed := MOUSE_SPEED + Random(MOUSE_SPEED_RANDOMNESS);
+    2: PickUpMouse;
+    3..400: begin
+      Wait(100 + Random(50));
+      Exit;
+    end;
+  end;
+  Inc(Players[CurrentPlayer].Integers[2]);
+  Inc(AntiBansGlobal);
+//  Inc(Stats_CustomVars[2]);
+end;
+
+function rInFight: boolean; // By Narcle
+var
+ T: Integer;
+begin
+  T := GetSystemTime + 2405;
+  if (not LoggedIn) or LobbyScreen then
+  begin
+    Result := False;
+    Exit;
+  end;
+  repeat
+    wait(66)
+    if (GetAnimation > -1) then
+      Result := true;
+  until Result or (GetSystemTime > T);
+end;
+
+function R_QuickVEB: Boolean; // ss23 & TGWGO
+var
+  Tiles: TPointArray;
+  P: TPoint;
+  Tries,bwait,impatient: Integer;
+begin
+  Result := R_BankScreen or R_PinScreen;
+  Tries := 0;
+  if Result then Exit;
+
+  Tiles := [Point(3251,3419), Point(3252,3419), Point(3253,3419),
+                  Point(3254,3419), Point(3255,3419), Point(3256,3419)];
+
+  SortTPAFrom(Tiles, GetMyPos);
+  if (DistanceFrom(Tiles[0]) > 3) or not TileOnMS(Tiles[0], 10) then
+  begin
+    if not(TileOnMM(Tiles[0])) then
+    begin
+      SRL_Warn('R_OpenBankBooth', 'Could not find Bank Booth.', Warn_AllVersions);
+      Exit;
+    end;
+    WalkToTile(Tiles[0], 0, 9);
+    Wait(1+Random(42));
+  end;
+  if not(TileOnMS(Tiles[0], 10)) then
+  begin
+    MarkTime(Bwait);
+    repeat
+      Wait(1+Random(42));
+      if TimeFromMark(Bwait) > 5000 then
+      begin
+        WriteLn('Tired of waiting for bank, exit!');
+        Exit;
+      end;
+    until (TileOnMS(Tiles[0], 10));
+  end;
+
+  if (GetMyPos = Tile(3250, 3419)) or (GetMyPos = Tile(3257, 3419)) then
+  begin
+    WalkToTile(Tile(3253, 3421), 1, 0);
+  end;
+
+  P := TileToMS(Tiles[0], 10);
+  Mouse(p.x - 7, p.y - 7, 16, 16, False);
+  Wait(1+Random(42));
+  if OptionExists('ank Banker') then
+  begin
+    R_ChooseOption('ank Banker');
+    repeat
+      MarkTime(impatient);
+      while not R_BankScreen or R_PinScreen do
+      begin
+        Wait(10+Random(42));
+        if TimeFromMark(impatient) > 9001 then
+          Break;
+      end;
+      Inc(Tries);
+      if (Length(Players) > 0) then
+        if Players[CurrentPlayer].Pin <> '' then
+          Result := InPin(Players[CurrentPlayer].Pin);
+      Result := R_BankScreen or R_PinScreen;
+    until Result or (Tries > 10);
+  end else
+  if OptionExists('se-quickly') then
+  begin
+    R_ChooseOption('se-quickly');
+    repeat
+      MarkTime(impatient);
+      repeat
+        Wait(10+Random(42));
+        if TimeFromMark(impatient) > 9001 then
+          Break;
+      until R_BankScreen or R_PinScreen;
+      Inc(Tries);
+      if (Length(Players) > 0) then
+        if Players[CurrentPlayer].Pin <> '' then
+          Result := InPin(Players[CurrentPlayer].Pin);
+      Result := R_BankScreen or R_PinScreen;
+    until Result or (Tries > 10);
+  end;
+end;
+
+function BankinDat(whereto: string): boolean;
+var FailTimes,PinFails: integer;
+begin
+  if whereto = 'leave' then
+  begin
+    Wait(1+Random(42)+Random(42));
+    WriteLn('Got the empty vials! Get to the fountain!');
+    r_WebWalkH(Tile(3239,3433));
+    //r_FFlag(8);
+    Exit;
+  end else
+  begin
+    r_WebWalkH(Tile(3253, 3420)); // VEB bank tile.
+    R_FFlag(0);
+    wait(100+Random(500));
+    FailTimes := 0;
+    PinFails := 0;
+    repeat
+      R_QuickVEB;
+      Inc(FailTimes);
+    until R_BankScreen or R_PinScreen or (FailTimes > 29) or (not LoggedIn);
+    if not LoggedIn then
+      Exit;
+    if (FailTimes > 29) then
+    begin
+      WriteLn('Banking failed to find bank. Gonna kill your player for your saftey.');
+      Players[CurrentPlayer].Rand := 'FailBankFind1';
+      CloseBank;
+      Logout;
+      NextPlayer(False);
+      Exit;
+    end;
+    if R_PinScreen then
+    repeat
+      Inc(PinFails);
+      Wait(200+Random(500));
+      InPin(Players[CurrentPlayer].Pin);
+      if PinFails > 60 then
+      begin
+        WriteLn('PIN failed 60 times. Gonna kill you.');
+        Players[CurrentPlayer].Rand := 'FailPinEnter1';
+        CloseBank;
+        Logout;
+        NextPlayer(False);
+        Exit;
+      end;
+    until BankScreen;
+    ClickToContinue;
+    if R_PinScreen then // Sometimes it breaks.
+      InPin(Players[CurrentPlayer].Pin);
+    Wait(10+Random(500));
+    Mouse(390, 305, 15, 10, True); // Deposit button, straight from SRL.
+    IncEx(VialsFilledGlobal,28);
+    IncEx(Players[CurrentPlayer].Integers[69],28);
+    stats_IncVariable('Potions Made',28);
+    Wait(10+Random(500));
+    FixBank;
+    Wait(1+Random(42));
+    if not R_WithdrawItem(229, 0) then // Empty vial 1x
+    begin
+      Result := False;
+      WriteLn('Failed to grab any empty vials 1x!');
+      Wait(1000+Random(4000));
+    end else
+    begin
+      Result := True;
+      BankinDat('leave');
+      Exit;
+    end;
+
+    if not R_WithdrawItem(229, 0) then // Empty vial 2x
+    begin
+      Result := False;
+      WriteLn('Failed to grab any empty vials 2x!');
+      Wait(1000+Random(4000));
+    end else
+    begin
+      Result := True;
+      BankinDat('leave');
+      Exit;
+    end;
+
+    if not Result then
+    begin
+      WriteLn('We failed to grab the vials (2x). Gotta kill this man, sorry!');
+      Players[CurrentPlayer].Rand := 'FailVialGrab1';
+      CloseBank;
+      Logout;
+      NextPlayer(False);
+      Exit;
+    end;
+  end;
+end;
+
+procedure KeepHealthy;
+var maximumtrolling: integer; current: string;
+begin
+  current := 'durr';
+  maximumtrolling := GetMMLevels('run',current);
+  case current of
+    'Orange','Yellow','Green': SetRun(True);
+  end;
+end;
+
+procedure LightUpInv;
+var ggx,ggy: integer;
+begin
+  if not (FindColor(ggx, ggy, 16777215, MIX1, MIY1, MIX2, MIY2)) then
+  begin
+    if R_CountItem(229) > 27 then
+      R_ClickItem(1+Random(27), True, '')
+    else
+      R_ClickItemBy(229, True, '');
+    if DebugMe then
+      Writeln('Used vial.');
+  end
+  else
+    if DebugMe then
+      Writeln('Did not use vial.');
+end;
+
+function Moving: boolean;
+var Speed: integer;
+begin
+  Speed := GetSpeed;
+  if Speed < 1 then
+    Result := False
+  else
+    Result := True;
+end;
+
+function AllFullOfWasser: boolean;
+var EMPTY_VIAL_ID, FULL_VIAL_ID: integer;
+begin
+
+  EMPTY_VIAL_ID      := 229;
+  FULL_VIAL_ID       := 227;
+  if (R_CountItem(EMPTY_VIAL_ID) < 1) or (R_CountItem(FULL_VIAL_ID) > 27) or not hInvFull then
+    Result := True
+  else
+    Result := False;
+end;
+
+function FindVictim: Boolean;
+var
+  //Wasserbrunnen: TRSObject; YAY FOR REFLECTION MEMLEAKS
+  P: TPoint;
+  srch,KillFailsafe,lx,ly,PreWalk: integer;
+begin
+  Result := False;
+  if not LoggedIn or LobbyScreen then
+    Exit;
+
+  if AllFullOfWasser then
+  begin
+    BankinDat('COCO WAS HIS NAME');
+  end;
+
+  Wait(50+Random(100));
+  R_FindRandoms;
+  AntiBan_Short;
+  ClickToContinue;
+  KeepHealthy;
+
+  if WORLD_LEAVE then // Ugly, but was annoying with "True and is not needed" errors.
+    if (TimeFromMark(PlayerSessionTime) > WorldLeaveMarker) then
+    begin
+      WriteLn('Time''s up! Switching world.');
+      Inc(WorldsHopped);
+      if HowManyPlayers = 1 then
+        ChangeWorld(RandomWorld(Players[CurrentPlayer].Member, False))
+      else
+        NextPlayer(True);
+    end;
+
+  PreWalk := 0;
+
+  if (DistanceFrom(Tile(3222,3219)) < 50) then // Lumby
+  begin
+    WriteLn('In Lumbridge!');
+    Exit;
+  end;
+
+  for srch := 0 to 3 do // if reflection misclicks pool so it won't wait 2 seconds
+  begin
+    LightUpInv;
+    //Wasserbrunnen := GetObjectByID(24214, OBJECT_TYPE_INTERACTABLE, 10);
+    //writeln(toStr(Wasserbrunnen));
+    P := TileToMS(Tile(3239, 3434),400);
+    if (toStr(P.X) = '-1') or (toStr(P.Y) = '-1') then
+    begin
+      if DebugMe then WriteLn('Empty location, fountain probably offscreen.');
+      Wait(10+Random(50));
+      if (DistanceFrom(Tile(3239,3433)) > 5) then
+        if not Moving then
+          r_WebWalkH(Tile(3239,3433));
+      Exit;
+    end;
+    if not TileOnMS(P, 600) then
+      if P = Tile(-1, -1) then
+        if not Moving then
+          R_WebWalkH(Tile(3239,3433));
+
+    begin
+      try
+        P := TileToMS(Tile(3239, 3434), 400);
+      except
+        WriteLn('Failed to find water!');
+        Exit;
+      end;
+      if (toStr(P.X) = '-1') or (toStr(P.Y) = '-1') then
+      begin
+        //WriteLn('Bad -1,-1, let''s break!');
+        Exit;
+      end;
+
+      MMouse(P.X-3, P.Y+3, 5, 5);
+      GetMousePos(lx,ly);
+      Wait(1+Random(5));
+      if R_IsUpText('se ') then
+      begin
+        Mouse(lx,ly,0,0,False);
+        Wait(1+Random(42));
+        if OptionExists('ountain') then
+          Result := True
+        else
+          Result := False;
+      end;
+
+      Inc(AtkFasf);
+      //writeln(tostr(atkfasf));
+      if AtkFasf > 30 then
+      begin
+        WriteLn('Failed to find fountain 30 times... Something might be bad.');
+        AtkFasf := 0;
+        Inc(notcooldood);
+        if (DistanceFrom(Tile(3239,3433)) < 50) then
+          if not Moving then
+            r_WebWalkH(Tile(3239,3433));
+        if notcooldood > 1 then
+          if TabExists(Tab_Magic) then
+          begin
+            WriteLn('We have the power to teleabort!');
+            GameTab(Tab_Magic);
+            Cast('lumbridge home teleport', False);
+            Wait(2000+Random(2000));
+            if IsChatBoxTextAnyLine('another',0) then
+            begin
+              WriteLn('Teleabort timer-blocked! Other user can take the lead.');
+              Result := False;
+              NextPlayer(True);
+              Exit;
+            end;
+            Wait(15000+Random(10000));
+            if (DistanceFrom(Tile(3222,3219)) < 50) then
+            begin
+              WriteLn('Back at home Lumby.');
+              notcooldood := 0;
+              Exit;
+            end;
+            WriteLn('Something is very FUBAR with your player. He will be executed now.');
+            Players[CurrentPlayer].Rand := 'FUBAR90x';
+            Logout;
+            NextPlayer(False);
+            Exit;
+          end;
+      end;
+
+      if Result then
+      begin
+        AtkFasf := 0;
+        notcooldood := 0;
+        R_ChooseOption('ountain');
+        if (R_FlagExists) then
+          R_Flag;
+        MarkTime(KillFailsafe);
+        repeat
+          if DebugMe then writeLn('we fillin');
+          Wait(10+Random(100));
+          R_FindRandoms;
+          AntiBan_Short;
+        until (not rInFight) or (TimeFromMark(KillFailsafe) > 30000) or (AllFullOfWasser); // 30 seconds
+        if (not loggedIn) or LobbyScreen then Exit;
+        if (TimeFromMark(KillFailsafe) > 30000) then
+        begin
+          writeLn('Took too long to fill vials, breaking out!')
+          wait(3000+Random(10000));
+        end
+        else
+        begin
+          if DebugMe then writeLn('VIAL HAS BEEN FILLED');
+            wait(10+Random(42));
+        end;
+        if AllFullOfWasser then
+          BankinDat('YOOOOOOO');
+        Exit;
+      end;
+    end;
+  end;
+end;
+
+procedure PrintReports;
+var
+  QC: array [0..1] of TStringArray; // Query = 0, Counter = 1.
+  I, II: Byte;
+begin
+  //ClearDebug;
+  WriteLn('[REPORT]');
+  SRLRandomsReport;
+  WriteLn('');
+
+  for II := 0 to 1 do
+    SetArrayLength(QC[II], 4);
+
+  QC[0] := ['Total runtime:',
+    'Players active:',
+    'Total vials filled:',
+    '-> Vials filled per hour:'];
+  QC[1] := [TimeRunning,
+    ToStr(PlayersActive) + ' out of ' + ToStr(HowManyPlayers),
+    ToStr(VialsFilledGlobal),
+    ToStr((3600 * (VialsFilledGlobal)) div (GetTimeRunning div 1000 + 1))];
+
+  WriteLn('<!---');
+  WriteLn('<! ' + Padr('Harry''s ' + SCRIPT_NAME, 32) + 'v' + SCRIPT_VERSION);
+  WriteLn('<!---');
+
+  II := High(QC[0]);
+  for I := 0 to II do
+    WriteLn('<! ' + Padr(QC[0][I], 32) + QC[1][I]);
+
+  WriteLn('<!---');
+  WriteLn('<! ## | Nick | A | VialsFilled/Hr: | Rand:')
+
+  for I := 0 to HowManyPlayers - 1 do
+    WriteLn('<! ' + Padr(ToStr(I),                                 3) +
+      '| ' + Padr(Copy(Players[I].Nick, 1, 4),                     5) +
+      '| ' + Padr(ToStr(Players[I].Active)[1],                     2) +
+      '| ' + Padr(ToStr(Players[I].Integers[69])+'/'+ToStr((3600 * (Players[I].Integers[69])) div (GetTimeRunning div 1000 + 1)),16) +
+      '| ' + Players[I].Rand);
+
+  WriteLn('<! Total anti-ban procedures run: '+ inttostr(AntiBansGlobal));
+  if WORLD_LEAVE then
+    WriteLn('<! World-hop in: '+ tostr(((Worldleavemarker + PlayerSessionTime) - (GetSystemTime)) div 60000) +' minutes.');
+  if DethWelks > 0 then
+    WriteLn('<! Death-walked '+toStr(DethWelks)+' times.');
+
+  if (TimeFromMark(StatsTimer) > 360000) then // 6 minutes.
+  begin
+    Stats_Commit;
+    MarkTime(StatsTimer);
+    WriteLn('<! Sent stats in!');
+  end;
+
+  if (SRLStats_Username = '') then
+    WriteLn('<! Please consider getting your own stats username @ http://stats.villavu.com');
+
+  WriteLn('<!---');
+  WriteLn('[/REPORT]');
+end;
+
+procedure Player_OnLogIn;
+begin
+  Wait(100+Random(1000));
+  if (R_FindRandoms) then
+    if (not Players[CurrentPlayer].Active) then
+    begin
+      WriteLn('Player is in a random.');
+      LogOut;
+      Players[CurrentPlayer].Active := False;
+      Players[CurrentPlayer].Status := 'InRandom';
+      Exit;
+    end;
+
+  MarkTime(PlayerSessionTime);
+  WorldLeaveMarker := (2100000 + Random(1500000) - Random(1500000)); // 2100000 ms = 35 minutes. 1500000 ms = 25 minutes. Add and subtract the 25 minutes from 35 giving a huge change of randomness for world-switching.
+  //Writeln(tostr(worldleavemarker));
+  SetAngle(True);
+  SetRun(True);
+end;
+
+procedure Autoupdateme;
+var ClientUp, Neifile:integer;
+    OnlineVersion, NewScript, NeiFeilNennen:string;
+begin
+  if Autochecken then
+  begin
+    writeln('Checking for script updates...');
+    ClientUp := InitializeHTTPClient(False, False);
+    SetHTTPUserAgent(ClientUp,'Simba ' + SCRIPT_VERSION);
+    OnlineVersion := GetHTTPPage(ClientUp,'http://harry.lu/srl/vialfiller-version.txt');
+    writeln(onlineversion);
+    writeln(script_version)
+    FreeHTTPClient(ClientUp);
+    if (Length(trim(OnlineVersion)) = 3) and (trim(OnlineVersion) > SCRIPT_VERSION) then
+    begin
+      writeLn('Newer script version online!');
+      writeLn('Autoupdating to newer version.');
+      ClientUp := InitializeHTTPClient(False,False);
+      SetHTTPUserAgent(ClientUp,'Simba');
+      NewScript := GetHTTPPage(ClientUp,'http://harry.lu/srl/vialfiller-current.txt');
+      FreeHTTPClient(ClientUp);
+
+      NeiFeilNennen := AppPath + SCRIPT_NAME + ' v'+trim(OnlineVersion)+' [Pub] by Harry.simba';
+      Neifile := Rewritefile(NeiFeilNennen, true);
+      try
+        WriteFileString(Neifile, NewScript);
+      except
+        begin
+          writeLn('Fatal error writing to '+NeiFeilNennen+'!!');
+          terminatescript;
+        end;
+      end;
+      CloseFile(Neifile);
+      writeLn('New script downloaded and saved at '+NeiFeilNennen+' !! Please use this!');
+      TerminateScript;
+    end else
+    begin
+      if (Length(trim(OnlineVersion)) <> 3) then
+        WriteLn('Version checking failed (debug: length was not equal), you might be outdated.')
+        else writeLn('You have the latest version of the script!');
+      exit;
+    end;
+  end else
+    WriteLn('!!!!! Not checking for latest version, you may be outdated!');
+end;
+
+procedure SetUpScript;
+var
+  i: Integer;
+begin
+  ClearDebug;
+
+  Smart_Server := SERVER;
+  Smart_Signed := SIGNED;
+  Smart_Members:= MEMBERS;
+
+  Autoupdateme;
+
+  SetUpSRL;
+  Reincarnate := True;
+  DeclarePlayers;
+  SetUpReflectionEx(True);
+
+  if (SRLStats_Username = '') then
+    SetupSRLStats(60, 'Anonymous', 'anon1337')
+  else
+    SetupSRLStats(60, SRLStats_Username, SRLStats_Password);
+
+  MouseSpeed := MOUSE_SPEED + Random(MOUSE_SPEED_RANDOMNESS);
+  SRL_Procs[srl_AntiBan] := @AntiBan_Short;
+  SRL_Procs[srl_OnLogIn] := @Player_OnLogIn;
+
+  for i := 0 to High(Players) do
+  begin
+    if (WORLD_SWITCH) then
+      Players[i].WorldInfo := [Players[i].Member, -1, False];
+    Players[i].Integers[4] := 1;
+  end;
+
+  ActivateClient;
+  Wait(1000 + Random(2000));
+end;
+
+procedure MainLoop;
+begin
+  LogInPlayer;
+
+  repeat
+    repeat
+      if(TimeFromMark(ReportTimer) > 60000)then // 1 minute
+      begin
+        PrintReports;
+        MarkTime(ReportTimer);
+      end;
+      HopelesslyLost;
+      FindVictim;
+      if (not LoggedIn) or LobbyScreen then
+      begin
+        Wait(5000+Random(5000));
+        if (not LoggedIn) or LobbyScreen then Break else Wait(1);
+      end;
+    until(False);
+    if LobbyScreen then
+      LeaveLobby;
+
+    WriteLn('Detected as logged out, NPlayer');
+    NextPlayer(Players[CurrentPlayer].Active);
+  until False;
+end;
+
+begin
+  SetUpScript;
+  MainLoop;
+end.

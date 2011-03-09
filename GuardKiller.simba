@@ -1,0 +1,1085 @@
+{///////////////////////////////////////////////////////////////////////////////
+//                                                                            //
+//                     Harry's Falador Guard Killer v0.5                      //
+//                                                                            //
+//   Requirements:                                                            //
+//     Level 23 (or higher) combat level required, 35+ suggested.             //
+//     Have tons of cooked fish in your bank, first or second slot ideally.   //
+//       Supported fish: cooked lobster, cooked tuna, cooked trout.           //
+//     Have ONE sword, and 2 pieces of armour, and be wearing them.           //
+//       Only have those items so you keep them in the rare event you die.    //
+//     Start in Fally WEST bank or at guards. (http://i.imgur.com/n4UbZ.png)  //
+//     Edit the consts below (DeclarePlayers, basic setup.)                   //
+//     Latest Simba with latest SRL and Reflection.                           //
+//                                                                            //
+//   Features:                                                                //
+//     Kills the guards at Falador.                                           //
+//     Eats and banks for more food.                                          //
+//     In the rare chance you die, will death-walk back to Falador.           //
+//     Script is designed to "never stop", should run until a random breaks.  //
+//     QUALITY SCRIPT                                                         //
+//     Auto-updating!                                                         //
+//     Anti-ban modules.                                                      //
+//     World-switches every ~25 minutes.                                      //
+//     Simple to setup and use!                                               //
+//     And much more!                                                         //
+//                                                                            //
+//   Future features (not yet added):                                         //
+//     Bone/item pick-up (not added due to exp/hour loss with item pick-up)   //
+//     Suggest something on the forums!                                       //
+//                                                                            //
+//   Known bugs/common questions:                                             //
+//     Exp/Hour is inaccurate if you use multiplayer (not too important).     //
+//                                                                            //
+////////////////////////////////////////////////////////////////////////////////
+//                                                                            //
+//                              Changelog!                                    //
+//    0.1 - Initial release.                                                  //
+//    0.2 - Fixes camera angle after deathwalk.                               //
+//            Will now eat lobster, tuna, or trout (lobster suggested).       //
+//            Failsafe when banking if guard is still attacking.              //
+//    0.3 - Handles the rare chance you get stuck inside the hairdresser.     //
+//            Writes exp gained per character per hour.                       //
+//    0.4 - SRL online stats.                                                 //
+//    0.5 - More failsafes on guard attacking, smoothed out some stuff.       //
+//                                                                            //
+////////////////////////////////////////////////////////////////////////////////
+//                                                                            //
+//   Script License: WTFPL - Do What The Fuck You Want To Public License.     //
+//                                                                            //
+//      This program is free software. It comes without any warranty, to the  //
+//      extent permitted by applicable law. You can redistribute it and/or    //
+//      modify it under the terms of the Do What The Fuck You Want To Public  //
+//      License, Version 2, as published by Sam Hocevar. See                  //
+//      http://sam.zoy.org/wtfpl/COPYING for more details.                    //
+//                                                                            //
+///////////////////////////////////////////////////////////////////////////////}
+
+program HarrysFallyGuardKiller;
+{$DEFINE SMART}
+{$i SRL/SRL.scar}
+{$i Reflection/Reflection.simba}
+{$i SRL/SRL/Skill/Magic.scar}
+{$i SRL/SRL/Misc/Stats.simba}
+
+procedure DeclarePlayers;
+begin
+  HowManyPlayers := 1;
+  CurrentPlayer := 0;
+  NumberOfPlayers(HowManyPlayers);
+
+  with Players[0] do
+  begin
+    Name        := 'Username';
+    Pass        := 'Password';
+    Nick        := 'nickname';
+    Pin         := '1337'; // Bank Pin - leave alone if you don't have one.
+    Member      := False;
+    Active      := True;
+  end;
+
+end;
+
+const
+  SERVER  = 61;     // Enter "0" to pick a random server.
+  SIGNED  = True;  // Use the signed RS-client? Leave at True unless you know what you're doing.
+  MEMBERS = False; // Set to True if using a RS-Members account. False if F2P.
+  WORLD_SWITCH = True; // Switch world when connecting to RS?
+  WORLD_LEAVE = True; // Hop words every ~25 minutes or so. WORLD_SWITCH must be true.
+
+  Autochecken = True; // Automatically check for updates and download the newer version of the script if it gets updated.
+  TrainLowest = True; // Train lowest melee skill, progressing up (make all melee skills the same level) - False will keep the default fightmode.
+
+  SRLStats_Username = ''; // Your SRL Stats Username (not RS!)
+  SRLStats_Password = ''; // Your SRL Stats Password (not RS!)
+
+////////////////////////////////////////////////////////////////////////////////
+//                                                                            //
+//   End of Basic Setup - you may continue down more IF you know what you're  //
+//          doing. If not, you will probably break something!...              //
+//                                                                            //
+////////////////////////////////////////////////////////////////////////////////
+
+  MOUSE_SPEED              = 15;
+  MOUSE_SPEED_RANDOMNESS   = 7;
+  // Mouse speed will be "MOUSE_SPEED + Random(MOUSE_SPEED_RANDOMNESS);".
+
+  DebugMe = False; // Get advanced debugs of current procedures. Not suggested.
+
+////////////////////////////////////////////////////////////////////////////////
+//                                                                            //
+//   End of Advanced Setup - really, do NOT touch anything below this....     //
+//           or you will probably break something......... :)                 //
+//                                                                            //
+////////////////////////////////////////////////////////////////////////////////
+
+  SCRIPT_NAME        = 'Falador Guard Killer';
+  SCRIPT_VERSION     = '0.5';
+  SECRET_GOOGLE_CODE = 'D8drez3z928'; // Ignore this.
+
+var PlayerSessionTime,ReportTimer,AntiBansGlobal, GuardsClickedGlobal,
+     WorldLeaveMarker,WorldsHopped, DethWelks, StatsTimer, AtkFasf, notcooldood : integer;
+
+Function r_WebWalkH(T: TTile): Boolean; // JuKKa
+Var
+  I: Integer;
+  M, P: TPoint;
+  CTRLPoints: TPointArray;
+Begin
+  P := TileToPoint(T);
+  Repeat
+    M := GetMyPos;
+    CtrlPoints := r_WindPath(M.x, M.y, P.X, P.Y, 5.0, 2.5, 0.0, 0.0, 4.5, 2.5);
+    For I:= High(CtrlPoints) DownTo 0 Do
+      if WalkToTile(Tile(CtrlPoints[i].x, CtrlPoints[i].y),0, 10) Then
+      Begin
+        Result := I = High(CtrlPoints);
+        R_FindRandoms;
+        Break;
+      End;
+    R_FindRandoms;
+  Until( Result );
+End;
+
+function NotSafeZone: boolean;
+var wTile: TPoint; LagTries,ee: integer;
+begin
+  if (DistanceFrom(Tile(2964, 3381)) > 35) then // Tile is at Fally north center.
+  begin
+    Writeln('Detected you away from Falador - waiting a few seconds to know for sure.');
+    Wait(4000+Random(5000));
+    if R_FindRandoms then // Maybe you triggered a random?
+      Wait(10000+Random(5000)) // Anti-lag problems.
+    else
+      Wait(3000+Random(3000));
+    if (DistanceFrom(Tile(2964, 3381)) > 35) then
+      Result := True
+    else
+      Result := False;
+    if Result = False then
+      Exit;
+    if Result then
+    begin
+      WriteLn('You probably ran away from those scary guards - let''s walk back to them.');
+      wTile := TileToMM(Tile(2965, 3394)); // North guard spot.
+      if not rs_OnMiniMap(wTile.X, wTile.Y) then
+      begin
+        WriteLn('Tile doesn''t exist, o noes! Might you be in lubmy?');
+        Result := True;
+        if (DistanceFrom(Tile(3222, 3219)) < 50) then
+        begin
+          WriteLn('You are in the Lubmy area. Let''s walk back to the guards.');
+          // Deathwalk stuff.
+          for ee := 1 to 3 do
+            R_ClickItem(ee, True, '');
+          Inc(DethWelks);
+          R_WebWalkH(Tile(3235, 3219)); // Lumby east int
+          r_FFlag(0);
+          R_WebWalkH(Tile(3218, 3247)); // Lumby north gen store
+          r_FFlag(5+Random(5)-Random(5));
+          R_WebWalkH(Tile(3078, 3249)); // draynor bank
+          r_FFlag(5+Random(5)-Random(5));
+          R_WebWalkH(Tile(3071, 3276)); // leave draynor
+          r_FFlag(5+Random(5)-Random(5));
+          R_WebWalkH(Tile(3008, 3279)); // music/highwaymen s. fally
+          r_FFlag(5+Random(5)-Random(5));
+          R_WebWalkH(Tile(3005, 3362)); // fally east bank
+          r_FFlag(5+Random(5)-Random(5));
+          R_WebWalkH(Tile(2964, 3381)); // Fally center
+          r_FFlag(0);
+          SetAngle(True);
+          WriteLn('How does I reflection deathwalk?');
+          if (DistanceFrom(Tile(2964, 3381)) < 35) then
+            Result := False
+          else
+            Result := True;
+          Exit;
+        end;
+        if TabExists(Tab_Magic) then
+        begin
+          WriteLn('We have the power to teleabort!');
+          GameTab(Tab_Magic);
+          Cast('lumbridge home teleport', False);
+          Wait(2000+Random(2000));
+          if IsChatBoxTextAnyLine('another',0) then
+          begin
+            WriteLn('Teleabort timer-blocked! Other user can take the lead.');
+            Result := False;
+            NextPlayer(True);
+            Exit;
+          end;
+          Wait(15000+Random(10000));
+          WriteLn('(Probably) back in lumby via teleport!');
+          if (DistanceFrom(Tile(3222, 3219)) < 50) then
+          begin
+            Inc(DethWelks);
+            R_WebWalkH(Tile(3235, 3219)); // Lumby east int
+            r_FFlag(0);
+            R_WebWalkH(Tile(3218, 3247)); // Lumby north gen store
+            r_FFlag(5+Random(5)-Random(5));
+            R_WebWalkH(Tile(3078, 3249)); // draynor bank
+            r_FFlag(5+Random(5)-Random(5));
+            R_WebWalkH(Tile(3071, 3276)); // leave draynor
+            r_FFlag(5+Random(5)-Random(5));
+            R_WebWalkH(Tile(3008, 3279)); // music/highwaymen s. fally
+            r_FFlag(5+Random(5)-Random(5));
+            R_WebWalkH(Tile(3005, 3362)); // fally east bank
+            r_FFlag(5+Random(5)-Random(5));
+            R_WebWalkH(Tile(2964, 3381)); // Fally center
+            r_FFlag(0);
+            WriteLn('How does I reflection deathwalk?');
+            SetAngle(True);
+          end;
+          Result := False;
+          Exit;
+        end;
+        Exit;
+      end
+      else
+      begin
+        WriteLn('Tile found, walking to it.');
+        repeat
+          Inc(LagTries);
+          Mouse(wTile.x, wTile.y, 1, 1, true);
+          Wait(RandomRange(3000, 5000));
+        until (LagTries > 3) or (DistanceFrom(Tile(2965, 3394)) < 7);
+        if LagTries > 3 then
+        begin
+          WriteLn('Could not get back to le guards, we failed.');
+          Result := True;
+          Exit;
+        end
+        else
+        begin
+          WriteLn('We got back to the guards, hell yeah!');
+          Result := False;
+          Exit;
+        end;
+      end;
+    end;
+  end else
+  begin
+    if DebugMe then WriteLn('You be there!');
+    Result := False;
+  end;
+end;
+
+function hInvFull: Boolean; // n3s
+begin
+  if (not LoggedIn) or LobbyScreen then
+  begin
+    Result := False;
+    Exit;
+  end;
+  Result := (InvCount = 28);
+end;
+
+procedure HopelesslyLost;
+begin
+  if NotSafeZone then
+  begin
+    if not LoggedIn or LobbyScreen then
+    begin
+      WriteLn('Not logged in, might you be at lobby screen?');
+      if LobbyScreen then
+      begin
+        writeLn('Not logged in, but at lobby screen - there is a chance you''re not broken.');
+        writeLn('Probably not broken - nextplayer true.');
+        LeaveLobby;
+        NextPlayer(True);
+        Exit;
+      end;
+      writeLn('Not logged in - there is a chance you''re not broken.');
+      writeLn('Probably not broken - nextplayer true.');
+      NextPlayer(True);
+      Exit;
+    end else
+    begin
+      writeLn('Reflection tiles say you''re not near Falador and logged in.');
+      writeLn('In random or broken; logging out for your saftey - nextplayer false.');
+      Players[CurrentPlayer].Rand := 'PlayerLost1';
+      nextPlayer(False);
+      Exit;
+    end;
+  end;
+end;
+
+procedure RandomRClickH; // phantombmx/EvilChicken - removed inv clicking
+var
+  M: Byte;
+  Inv: Boolean;
+begin
+  if (not LoggedIn) then exit;
+  M := MouseSpeed;
+  MouseSpeed := 7 + Random(25);
+  MouseBox(MSX1, MSY1, MIX2, MIY2, 2)
+  if (Random(3) > 0) then
+    Inv := ChooseOption('xamine');
+  if (not Inv) then ChooseOption('ancel');
+  MouseSpeed := M;
+end;
+
+procedure AntiBan_Short;
+begin
+  case (Random(400)) of
+    0: RandomRClickH;
+    1: MouseSpeed := MOUSE_SPEED + Random(MOUSE_SPEED_RANDOMNESS);
+    2: PickUpMouse;
+    3..400: begin
+      Wait(100 + Random(50));
+      Exit;
+    end;
+  end;
+  Inc(Players[CurrentPlayer].Integers[2]);
+  Inc(AntiBansGlobal);
+//  Inc(Stats_CustomVars[2]);
+end;
+
+function rInFight: boolean; // By Narcle
+var
+ T: Integer;
+begin
+  T := GetSystemTime + 1405; // 2405
+  if (not LoggedIn) or LobbyScreen then
+  begin
+    Result := False;
+    Exit;
+  end;
+  repeat
+    wait(66)
+    if (GetAnimation > -1) then
+      Result := true;
+  until Result or (GetSystemTime > T);
+end;
+
+function BankinDat(whereto: string): boolean;
+var FailTimes,playhimoffkeyboardcat,areyoudoneyet: integer; CenterFally: TPoint;
+begin
+  if whereto = 'leave' then
+  begin
+    WriteLn('Got the food! Get those guards.');
+    CenterFally := intToPoint(2964+Random(7)-Random(7), 3381+Random(7)-Random(7));
+    r_WebWalkH(CenterFally);
+    r_FFlag(6);
+    Exit;
+  end else
+  begin
+    r_WebWalkH(Tile(2946, 3369)); // Fally bank tile.
+    R_FFlag(0);
+    wait(1500+Random(1000));
+    FailTimes := 0;
+    repeat
+      R_OpenBankBooth('fwb');
+      Inc(FailTimes);
+    until R_BankScreen or R_PinScreen or (FailTimes > 4) or (not LoggedIn);
+    if not LoggedIn then
+      Exit;
+    if (FailTimes > 4) then
+    begin
+      WriteLn('Banking failed to find bank. Gonna kill your player for your saftey.');
+      Players[CurrentPlayer].Rand := 'FailBankFind1';
+      CloseBank;
+      Logout;
+      NextPlayer(False);
+      Exit;
+    end;
+    if R_PinScreen then
+      InPin(Players[CurrentPlayer].Pin);
+    ClickToContinue;
+    if R_PinScreen then // Sometimes it breaks.
+      InPin(Players[CurrentPlayer].Pin);
+    Wait(100+Random(3000));
+    R_DepositAll(True);
+    Wait(500+Random(1500));
+    FixBank;
+    Wait(50+Random(200));
+    if not BankScreen then
+    begin
+      WriteLn('Argh, ye probably still in a fight. Finish him.');
+      areyoudoneyet := 0;
+      MarkTime(playhimoffkeyboardcat);
+      repeat
+        Wait(500+Random(1000));
+        if (TimeFromMark(playhimoffkeyboardcat) > 45000) then // 45s
+          Break;
+        if not rInFight then
+          Inc(areyoudoneyet);
+        if (areyoudoneyet > 9) then
+          Break;
+        if (DistanceFrom(Tile(3222, 3219)) < 50) then
+          Break;
+        if not LoggedIn then
+          Exit;
+      until False; // Don't worry.
+      if (TimeFromMark(playhimoffkeyboardcat) > 45000) then
+      begin
+        WriteLn('Something went wrong waiting at bank... Gotta kill you man.');
+        Players[CurrentPlayer].Rand := 'FailBankWait1';
+        CloseBank;
+        Logout;
+        NextPlayer(False);
+        Exit;
+      end;
+      if (areyoudoneyet > 9) then
+      begin
+        WriteLn('Fight is over, I think. Let''s rerun the banking.');
+        BankinDat('enter'); // heard you liked banking
+        Exit;
+      end;
+      if (DistanceFrom(Tile(3222, 3219)) < 50) then
+      begin
+        WriteLn('You died D; Gotta run back.');
+        Exit;
+      end;
+      WriteLn('This should never happen!! THE BEEEEEEEES');
+    end;
+    if not R_WithdrawItem(379, 10) then // Lobster
+    begin
+      Result := False;
+      WriteLn('Failed to grab any lobsters!');
+      if not R_WithdrawItem(361, 10) then // Tuna
+      begin
+        Result := False;
+        WriteLn('Failed to grab any tuna!');
+        if not R_WithdrawItem(333, 10) then // Trout
+        begin
+          Result := False;
+          WriteLn('Failed to grab any trout!');
+        end else
+        begin
+          Result := True;
+          BankinDat('leave');
+          Exit;
+        end;
+      end else
+      begin
+        Result := True;
+        BankinDat('leave');
+        Exit;
+      end;
+    end else
+    begin
+      Result := True;
+      BankinDat('leave');
+      Exit;
+    end;
+
+    if not Result then
+    begin
+      WriteLn('We failed to grab the food (2x). Gotta kill this man, sorry!');
+      Players[CurrentPlayer].Rand := 'FailFoodGrab1';
+      CloseBank;
+      Logout;
+      NextPlayer(False);
+      Exit;
+    end;
+  end;
+end;
+
+function KeepHealthy(notinfightan: integer): boolean;
+var maximumtrolling: integer; current: string; Lefood: TInvItem;
+begin
+  if notinfightan = 1 then
+  begin
+    current := 'durr';
+    maximumtrolling := GetMMLevels('run',current);
+    case current of
+      'Orange','Yellow','Green': SetRun(True);
+    end;
+  end;
+
+  current := 'durr';
+  maximumtrolling := GetMMLevels('hp',current);
+  case current of
+    'Orange', 'Red':
+    begin
+      if not R_ItemExists(379, Lefood) then // Lobs
+      begin
+        Result := False;
+        WriteLn('No lobsters!');
+        if not R_ItemExists(361, Lefood) then // Tuna
+        begin
+          Result := False;
+          WriteLn('No tuna!');
+          if not R_ItemExists(333, Lefood) then // Trout
+          begin
+            Result := False;
+            WriteLn('No trout!');
+          end else
+          begin
+            R_ClickItem(Lefood.slot, True, '');
+            WriteLn('We ate a trout.');
+            Result:=True;
+            Exit;
+          end;
+        end else
+        begin
+          R_ClickItem(Lefood.slot, True, '');
+          WriteLn('We ate a tuna.');
+          Result:=True;
+          Exit;
+        end;
+      end else
+      begin
+        R_ClickItem(Lefood.slot, True, '');
+        WriteLn('We ate a lobster.');
+        Result:=True;
+        Exit;
+      end;
+
+      if not Result then
+      begin
+        WriteLn('Oh noes we are out of delicious food. Bank time.');
+        BankinDat('enter');
+        Exit;
+      end else
+        WriteLn('We eated some good food!');
+    end;
+  end;
+end;
+
+function InBarbahshop: boolean;
+var CurPos: TTile;
+begin
+  CurPos := GetMyPos;
+  case CurPos of
+    Tile(2945, 3388): Result := True;
+    Tile(2944, 3388): Result := True;
+    Tile(2944, 3387): Result := True;
+    Tile(2944, 3386): Result := True;
+    Tile(2945, 3386): Result := True;
+    Tile(2944, 3386): Result := True;
+    Tile(2943, 3386): Result := True;
+    Tile(2942, 3386): Result := True;
+    Tile(2943, 3386): Result := True;
+    Tile(2943, 3385): Result := True;
+    Tile(2944, 3385): Result := True;
+    Tile(2945, 3385): Result := True;
+    Tile(2945, 3384): Result := True;
+    Tile(2944, 3384): Result := True;
+    Tile(2943, 3384): Result := True;
+    Tile(2942, 3384): Result := True;
+    Tile(2943, 3384): Result := True;
+    Tile(2943, 3383): Result := True;
+    Tile(2944, 3383): Result := True;
+    Tile(2944, 3382): Result := True;
+    Tile(2945, 3382): Result := True;
+    Tile(2944, 3382): Result := True;
+    Tile(2943, 3382): Result := True;
+    Tile(2942, 3382): Result := True;
+    Tile(2943, 3382): Result := True;
+    Tile(2943, 3381): Result := True;
+    Tile(2944, 3381): Result := True;
+    Tile(2945, 3381): Result := True;
+    Tile(2945, 3380): Result := True;
+    Tile(2946, 3380): Result := True;
+    Tile(2947, 3380): Result := True;
+    Tile(2946, 3380): Result := True;
+    Tile(2945, 3380): Result := True;
+    Tile(2944, 3380): Result := True;
+    Tile(2943, 3380): Result := True;
+    Tile(2942, 3380): Result := True;
+    Tile(2943, 3380): Result := True;
+    Tile(2943, 3379): Result := True;
+    Tile(2944, 3379): Result := True;
+    Tile(2945, 3379): Result := True;
+    Tile(2946, 3379): Result := True;
+    Tile(2947, 3379): Result := True;
+    Tile(2948, 3379): Result := True;
+    Tile(2948, 3378): Result := True;
+    Tile(2947, 3378): Result := True;
+    Tile(2947, 3379): Result := True;
+    Tile(2946, 3379): Result := True;
+    Tile(2945, 3379): Result := True;
+    Tile(2945, 3378): Result := True;
+    Tile(2944, 3378): Result := True;
+    Tile(2943, 3378): Result := True;
+    Tile(2942, 3378): Result := True;
+    Tile(2943, 3378): Result := True;
+    Tile(2943, 3377): Result := True;
+    Tile(2943, 3378): Result := True;
+    Tile(2944, 3378): Result := True;
+    Tile(2945, 3378): Result := True;
+    Tile(2945, 3377): Result := True;
+    Tile(2946, 3377): Result := True;
+  end;
+end;
+
+procedure ExitBarbah;
+var leherp: TPoint;
+begin
+  if InBarbahshop then
+  begin
+    WriteLn('You fell into the Barbershop of doom!');
+    R_FFlag(0);
+    Wait(500+Random(2000));
+    if InBarbahshop then
+    begin
+      if TileOnMM(Tile(2948, 3379)) then
+      begin
+        leherp := TileToMM(Tile(2948, 3379));
+        Mouse(leherp.X, leherp.Y,10,10,True);
+        Wait(1+Random(42));
+        R_FFlag(0);
+        Wait(42+Random(1000));
+        SetAngle(False);
+        Wait(42+Random(1000));
+        MakeCompass('E');
+        Wait(42+Random(1000));
+        leherp := TileToMS(Tile(2951, 3379),200);
+        Mouse(leherp.X, leherp.Y,10,10,True);
+        Wait(42+Random(1000));
+        R_FFlag(0);
+        Wait(42+Random(1000));
+        WalkToTile(Tile(2954, 3379),2,0);
+        R_FFlag(0);
+        Wait(42+Random(2000));
+        if InBarbahshop then
+        begin
+          WriteLn('Your account is stuck in the Barbershop! Teleporting home.');
+          Cast('lumbridge home teleport', False);
+          Wait(2000+Random(2000));
+          if IsChatBoxTextAnyLine('another',0) then
+          begin
+            WriteLn('Teleabort timer-blocked! Other user can take the lead.');
+            NextPlayer(True);
+            Exit;
+          end;
+          Wait(15000+Random(10000));
+          Exit;
+        end
+        else
+        begin
+          WriteLn('We escaped!');
+          SetAngle(True);
+          Wait(42+Random(2000));
+          MakeCompass('N');
+          Exit;
+        end;
+      end;
+    end;
+  end;
+end;
+
+function FindVictim: Boolean;
+var
+  Victims: TNPCArray;
+  P: TPoint;
+  srch,KillFailsafe,lx,ly,PreWalk: integer;
+begin
+  Result := False;
+  if not LoggedIn or LobbyScreen then
+    Exit;
+
+  Wait(50+Random(100));
+  R_FindRandoms;
+  AntiBan_Short;
+  ClickToContinue;
+
+  Players[CurrentPlayer].Integers[6] := R_GetSkillLevel(Skill_Attack);
+  Players[CurrentPlayer].Integers[7] := R_GetSkillLevel(Skill_Strength);
+  Players[CurrentPlayer].Integers[8] := R_GetSkillLevel(Skill_Defence);
+  Players[CurrentPlayer].Integers[9] := R_GetSkillLevel(Skill_HP);
+
+  Players[CurrentPlayer].Integers[11] := R_GetSkillExperience(Skill_Attack) + R_GetSkillExperience(Skill_Strength) + R_GetSkillExperience(Skill_Defence) + R_GetSkillExperience(Skill_HP);
+
+  if Random(5) = 0 then // No need to call it every time.
+    ExitBarbah;
+
+  if WORLD_LEAVE then // Ugly, but was annoying with "True and is not needed" errors.
+    if (TimeFromMark(PlayerSessionTime) > WorldLeaveMarker) then
+    begin
+      WriteLn('Time''s up! Switching world.');
+      Inc(WorldsHopped);
+      if HowManyPlayers = 1 then
+        ChangeWorld(RandomWorld(Players[CurrentPlayer].Member, False))
+      else
+        NextPlayer(True);
+    end;
+
+  KeepHealthy(1);
+
+  if hInvFull then
+  begin
+    WriteLn('We need to free some inv slots yo.');
+    BankinDat('enter');
+    Exit;
+  end;
+
+  PreWalk := 0;
+  setlength(Victims, 0);
+
+  if (DistanceFrom(Tile(3222, 3219)) < 50) then // Lumby
+  begin
+    WriteLn('In Lumbridge!');
+    Exit;
+  end;
+
+  for srch := 0 to 3 do // if reflection misclicks guard so it won't wait 2 seconds
+  begin
+    Victims := SortNPCs(GetNPCs('uard'));
+    if GetArrayLength(Victims) = 0 then
+    begin
+      if DebugMe then WriteLn('Empty array, all guards are probably dead.');
+      Wait(50+Random(50));
+      if (DistanceFrom(Tile(2965, 3394)) > 10) then
+        r_WebWalkH(Tile(2965, 3394));
+      Exit;
+    end;
+    if not TileOnMS(Victims[0].Tile, 800) then
+      if Victims[0].Tile = Tile(-1, -1) then
+        R_WebWalkH(Tile(2965, 3394)) // N. guard tile
+      else
+      if PreWalk = 1 then
+        R_FFlag(0)
+      else
+      begin
+        WalkToTile(Victims[0].Tile,2,5+Random(5));
+        PreWalk := 1;
+      end;
+
+    begin
+      try
+        P := TileToMS(Victims[0].Tile, 800);
+      except
+        WriteLn('Failed to find victim!');
+        Exit;
+      end;
+      if (toStr(P.X) = '-1') or (toStr(P.Y) = '-1') then
+      begin
+        //WriteLn('Bad -1,-1, let''s break!');
+        Exit;
+      end;
+
+      MMouse(P.X, P.Y, 7, 7);
+      Wait(1+Random(42));
+      if R_IsUptext('Attack Guard') then
+      begin
+        GetMousePos(lx,ly);
+        Mouse(lx,ly,0,0,True);
+        if r_WaitCrossHairColor(CROSSHAIR_RED, 500+Random(100)-Random(100)) then
+          Result := True
+        else
+          Result := False;
+      end else
+        Inc(AtkFasf);
+
+      if AtkFasf > 90 then
+      begin
+        WriteLn('Failed to find guard 90 times... Something might be bad.');
+        AtkFasf := 0;
+        Inc(notcooldood);
+        if (DistanceFrom(Tile(2964, 3381)) < 50) then
+          r_WebWalkH(Tile(2965, 3394));
+        if notcooldood > 1 then
+          if TabExists(Tab_Magic) then
+          begin
+            WriteLn('We have the power to teleabort!');
+            GameTab(Tab_Magic);
+            Cast('lumbridge home teleport', False);
+            Wait(2000+Random(2000));
+            if IsChatBoxTextAnyLine('another',0) then
+            begin
+              WriteLn('Teleabort timer-blocked! Other user can take the lead.');
+              Result := False;
+              NextPlayer(True);
+              Exit;
+            end;
+            Wait(15000+Random(10000));
+            if (DistanceFrom(Tile(3222, 3219)) < 50) then
+            begin
+              WriteLn('Back at home Lumby.');
+              notcooldood := 0;
+              Exit;
+            end;
+            WriteLn('Something is very FUBAR with your player. He will be executed now.');
+            Players[CurrentPlayer].Rand := 'FUBAR90x';
+            CloseBank;
+            Logout;
+            NextPlayer(False);
+            Exit;
+          end;
+        end;
+        if Result then
+        begin
+          AtkFasf := 0;
+          notcooldood := 0;
+          if (R_FlagExists) then
+            R_Flag;
+          MarkTime(KillFailsafe);
+          Inc(GuardsClickedGlobal);
+          stats_IncVariable('Guards Killed', 1);
+          repeat
+            if DebugMe then writeLn('we killin');
+            Wait(50+Random(100));
+            R_FindRandoms;
+            AntiBan_Short;
+            if not hInvFull then ClickToContinue;
+            KeepHealthy(0);
+          until (not rInFight) or (TimeFromMark(KillFailsafe) > 30000) or (hInvFull); // 30 seconds
+          if hInvFull or (not loggedIn) or LobbyScreen then Exit;
+          if (TimeFromMark(KillFailsafe) > 30000) then
+          begin
+            writeLn('Took too long to kill guard, breaking out!')
+            wait(3000+Random(10000));
+          end
+          else
+          begin
+            if DebugMe then writeLn('GUARD HAS BEEN SLAUGHTERED');
+            wait(10+Random(500));
+          end;
+          Exit;
+        end;
+      end;
+    end;
+  end;
+//end;
+
+procedure PrintReports;
+var
+  QC: array [0..1] of TStringArray; // Query = 0, Counter = 1.
+  I, II: Byte;
+  totalgain, hourgain: integer;
+begin
+  //ClearDebug;
+  WriteLn('[REPORT]');
+  SRLRandomsReport;
+  WriteLn('');
+
+  for II := 0 to 1 do
+    SetArrayLength(QC[II], 4);
+
+  QC[0] := ['Total runtime:',
+    'Players active:',
+    'Total guards killed:',
+    '-> Guards killed per hour:'];
+  QC[1] := [TimeRunning,
+    ToStr(PlayersActive) + ' out of ' + ToStr(HowManyPlayers),
+    ToStr(GuardsClickedGlobal),
+    ToStr((3600 * (GuardsClickedGlobal)) div (GetTimeRunning div 1000 + 1))];
+
+  WriteLn('<!---');
+  WriteLn('<! ' + Padr('Harry''s ' + SCRIPT_NAME, 32) + 'v' + SCRIPT_VERSION);
+  WriteLn('<!---');
+
+  II := High(QC[0]);
+  for I := 0 to II do
+    WriteLn('<! ' + Padr(QC[0][I], 32) + QC[1][I]);
+
+  WriteLn('<!---');
+  WriteLn('<! ## | Nick | A | A/S/D/H Lvl: | ExpGained/Hr: | Rand:')
+
+  for I := 0 to HowManyPlayers - 1 do
+  begin
+    if (Players[I].Integers[11] > 1) and (Players[I].Integers[10] > 1) then
+    begin
+      totalgain := Players[I].Integers[11] - Players[I].Integers[10]; // Current minus old (script begin)
+      if Players[I].Integers[20] < 1 then
+        Players[I].Integers[20] := totalgain;
+      Players[I].Integers[21] := totalgain - Players[I].Integers[20]; // Gain difference.
+    end else
+      totalgain := 0;
+    if Players[I].Integers[21] > 0 then
+    begin
+      stats_IncVariable('Total EXP Gained',Players[I].Integers[21]);
+      Players[I].Integers[20] := totalgain;
+    end;
+    if Players[I].Integers[11] > 0 then
+      hourgain := (3600 * (totalgain)) div (GetTimeRunning div 1000 + 1)
+    else
+      hourgain := 0;
+
+    WriteLn('<! ' + Padr(ToStr(I),                                 3) +
+      '| ' + Padr(Copy(Players[I].Nick, 1, 4),                     5) +
+      '| ' + Padr(ToStr(Players[I].Active)[1],                     2) +
+      '| ' + Padr(ToStr(Players[I].Integers[6])+'/'+ToStr(Players[I].Integers[7])+'/'+ToStr(Players[I].Integers[8])+'/'+ToStr(Players[I].Integers[9]), 13) +
+      '| ' + Padr(ToStr(totalgain)+'/'+ToStr(hourgain),14) +
+      '| ' + Players[I].Rand);
+
+  end;
+  WriteLn('<! Total anti-ban procedures run: '+ inttostr(AntiBansGlobal));
+  if WORLD_LEAVE then
+    WriteLn('<! World-hop in: '+ tostr(((Worldleavemarker + PlayerSessionTime) - (GetSystemTime)) div 60000) +' minutes.');
+  if DethWelks > 0 then
+    WriteLn('<! Death-walked '+toStr(DethWelks)+' times.');
+
+  if (TimeFromMark(StatsTimer) > 360000) then // 6 minutes.
+  begin
+    Stats_Commit;
+    MarkTime(StatsTimer);
+    WriteLn('<! Sent stats in!');
+  end;
+
+  if (SRLStats_Username = '') then
+    WriteLn('<! Please consider getting your own stats username @ http://stats.villavu.com');
+
+  WriteLn('<!---');
+  WriteLn('[/REPORT]');
+end;
+
+procedure Player_OnLogIn;
+var cblevl: integer;
+begin
+  Wait(100+Random(1000));
+  if (R_FindRandoms) then
+    if (not Players[CurrentPlayer].Active) then
+    begin
+      WriteLn('Player is in a random.');
+      LogOut;
+      Players[CurrentPlayer].Active := False;
+      Players[CurrentPlayer].Status := 'InRandom';
+      Exit;
+    end;
+
+  MarkTime(PlayerSessionTime);
+  WorldLeaveMarker := (2100000 + Random(1500000) - Random(1500000)); // 2100000 ms = 35 minutes. 1500000 ms = 25 minutes. Add and subtract the 25 minutes from 35 giving a huge change of randomness for world-switching.
+  //Writeln(tostr(worldleavemarker));
+  SetAngle(True);
+  SetRun(True);
+  Retaliate(True);
+  if (Players[CurrentPlayer].Integers[10] < 10) then
+    Players[CurrentPlayer].Integers[10] := R_GetSkillExperience(Skill_Attack) + R_GetSkillExperience(Skill_Strength) + R_GetSkillExperience(Skill_Defence) + R_GetSkillExperience(Skill_HP);
+  if TrainLowest then
+  begin
+    Players[CurrentPlayer].Integers[6] := R_GetSkillLevel(Skill_Attack);
+    Players[CurrentPlayer].Integers[7] := R_GetSkillLevel(Skill_Strength);
+    Players[CurrentPlayer].Integers[8] := R_GetSkillLevel(Skill_Defence);
+    if Players[CurrentPlayer].Integers[7] < Players[CurrentPlayer].Integers[6] then
+    begin  // Borrowed some logic from Tarajunky
+      if Players[CurrentPlayer].Integers[8] < Players[CurrentPlayer].Integers[7] then
+        SetFightMode(4)
+      else
+        SetFightMode(2);
+    end else
+    begin
+      if Players[CurrentPlayer].Integers[8] < Players[CurrentPlayer].Integers[6] then
+        SetFightMode(4)
+      else
+        SetFightMode(1);
+    end;
+    cblevl:=GetCombatLevel;
+    writeln('You are combat level: '+toStr(cblevl));
+    if (cblevl < 23) and (cblevl > 2) then
+    begin
+      WriteLn('You MUST be combat level 23 or higher to run this script!');
+      WriteLn('It''s nothing personal!');
+      NextPlayer(False);
+      Exit;
+    end;
+  end;
+end;
+
+procedure Autoupdateme;
+var ClientUp, Neifile:integer;
+    OnlineVersion, NewScript, NeiFeilNennen:string;
+begin
+  if Autochecken then
+  begin
+    writeln('Checking for script updates...');
+    ClientUp := InitializeHTTPClient(False, False);
+    SetHTTPUserAgent(ClientUp,'Simba ' + SCRIPT_VERSION);
+    OnlineVersion := GetHTTPPage(ClientUp,'http://harry.lu/srl/guardkiller-version.txt');
+    writeln(onlineversion);
+    writeln(script_version)
+    FreeHTTPClient(ClientUp);
+    if (Length(trim(OnlineVersion)) = 3) and (trim(OnlineVersion) > SCRIPT_VERSION) then
+    begin
+      writeLn('Newer script version online!');
+      writeLn('Autoupdating to newer version.');
+      ClientUp := InitializeHTTPClient(False,False);
+      SetHTTPUserAgent(ClientUp,'Simba');
+      NewScript := GetHTTPPage(ClientUp,'http://harry.lu/srl/guardkiller-current.txt');
+      FreeHTTPClient(ClientUp);
+
+      NeiFeilNennen := AppPath + SCRIPT_NAME + ' v'+trim(OnlineVersion)+' [Pub] by Harry.simba';
+      Neifile := Rewritefile(NeiFeilNennen, true);
+      try
+        WriteFileString(Neifile, NewScript);
+      except
+        begin
+          writeLn('Fatal error writing to '+NeiFeilNennen+'!!');
+          terminatescript;
+        end;
+      end;
+      CloseFile(Neifile);
+      writeLn('New script downloaded and saved at '+NeiFeilNennen+' !! Please use this!');
+      TerminateScript;
+    end else
+    begin
+      if (Length(trim(OnlineVersion)) <> 3) then
+        WriteLn('Version checking failed (debug: length was not equal), you might be outdated.')
+        else writeLn('You have the latest version of the script!');
+      exit;
+    end;
+  end else
+    WriteLn('!!!!! Not checking for latest version, you may be outdated!');
+end;
+
+procedure SetUpScript;
+var
+  i: Integer;
+begin
+  ClearDebug;
+
+  Smart_Server := SERVER;
+  Smart_Signed := SIGNED;
+  Smart_Members:= MEMBERS;
+
+  Autoupdateme;
+
+  SetUpSRL;
+  Reincarnate := True;
+  DeclarePlayers;
+  SetUpReflectionEx(True);
+
+  if (SRLStats_Username = '') then
+    SetupSRLStats(57, 'Anonymous', 'anon1337')
+  else
+    SetupSRLStats(57, SRLStats_Username, SRLStats_Password);
+
+  MouseSpeed := MOUSE_SPEED + Random(MOUSE_SPEED_RANDOMNESS);
+  SRL_Procs[srl_AntiBan] := @AntiBan_Short;
+  SRL_Procs[srl_OnLogIn] := @Player_OnLogIn;
+
+  for i := 0 to High(Players) do
+  begin
+    if (WORLD_SWITCH) then
+      Players[i].WorldInfo := [Players[i].Member, -1, False];
+    Players[i].Integers[4] := 1;
+  end;
+
+  ActivateClient;
+  Wait(1000 + Random(2000));
+end;
+
+procedure MainLoop;
+begin
+  LogInPlayer;
+
+  repeat
+    repeat
+      if(TimeFromMark(ReportTimer) > 60000)then // 1 minute
+      begin
+        PrintReports;
+        MarkTime(ReportTimer);
+      end;
+      HopelesslyLost;
+      FindVictim;
+      if (not LoggedIn) or LobbyScreen then
+      begin
+        Wait(5000+Random(5000));
+        if (not LoggedIn) or LobbyScreen then Break else Wait(1);
+      end;
+    until(False);
+    if LobbyScreen then
+      LeaveLobby;
+
+    WriteLn('Detected as logged out, NPlayer');
+    NextPlayer(Players[CurrentPlayer].Active);
+  until False;
+end;
+
+begin
+  SetUpScript;
+  MainLoop;
+end.
