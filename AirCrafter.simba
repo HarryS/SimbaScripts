@@ -1,9 +1,9 @@
-{///////////////////////////////////////////////////////////////////////////////
+﻿{///////////////////////////////////////////////////////////////////////////////
 //                                                                            //
-//                          Harry's Air Crafter v0.1                          //
+//                          Harry's Air Crafter v0.2                          //
 //                                                                            //
 //   Requirements:                                                            //
-//     None!                                                                  //
+//     None! (Level 1 Runecrafting)                                           //
 //     Have tons of rune essence your bank - first or second slot ideally.    //
 //     You MUST be wearing an Air tiara.                                      //
 //     Start in Varrock WEST bank. (http://i.imgur.com/j72xQ.png)             //
@@ -30,6 +30,7 @@
 //                                                                            //
 //                              Changelog!                                    //
 //    0.1 - Initial release.                                                  //
+//    0.2 - Fixed small issue with finding ruins.                             //
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
@@ -102,8 +103,8 @@ const
 ////////////////////////////////////////////////////////////////////////////////
 
   SCRIPT_NAME        = 'Air Crafter';
-  SCRIPT_VERSION     = '0.1';
-  SECRET_GOOGLE_CODE = 'dsdsf94z'; // Ignore this.
+  SCRIPT_VERSION     = '0.2';
+  SECRET_GOOGLE_CODE = 'zAr4938d8b'; // Ignore this.
 
 var PlayerSessionTime,ReportTimer,AntiBansGlobal, AirsCraftedGlobal,
      WorldLeaveMarker,WorldsHopped, DethWelks, StatsTimer, AtkFasf, notcooldood : integer;
@@ -751,7 +752,7 @@ begin
 
     begin
       try
-        P := TileToMS(Tile(3127, 3405), 600);
+        P := TileToMS(Tile(3128, 3405), 600);
       except
         WriteLn('Failed to find ruin!');
         Exit;
