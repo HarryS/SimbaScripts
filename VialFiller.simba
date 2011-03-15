@@ -1,6 +1,6 @@
-{///////////////////////////////////////////////////////////////////////////////
+﻿{///////////////////////////////////////////////////////////////////////////////
 //                                                                            //
-//                          Harry's Vial Filler v0.2                          //
+//                          Harry's Vial Filler v0.4                          //
 //                                                                            //
 //   Requirements:                                                            //
 //     None!                                                                  //
@@ -29,6 +29,8 @@
 //                              Changelog!                                    //
 //    0.1 - Initial release.                                                  //
 //    0.2 - Removal of TRSObjects due to memleaks.                            //
+//    0.3 - Better handling of no vials left and bank randoms.                //
+//    0.4 - Small object finding issue that may happen in very rare cases.    //
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
@@ -100,8 +102,8 @@ const
 ////////////////////////////////////////////////////////////////////////////////
 
   SCRIPT_NAME        = 'Vial Filler';
-  SCRIPT_VERSION     = '0.2';
-  SECRET_GOOGLE_CODE = 'D8zw2o0db8s2'; // Ignore this.
+  SCRIPT_VERSION     = '0.4';
+  SECRET_GOOGLE_CODE = 'sda28934iDRE'; // Ignore this.
 
 var PlayerSessionTime,ReportTimer,AntiBansGlobal, VialsFilledGlobal,
      WorldLeaveMarker,WorldsHopped, DethWelks, StatsTimer, AtkFasf, notcooldood : integer;
@@ -113,7 +115,7 @@ Var
   CTRLPoints: TPointArray;
 Begin
   P := TileToPoint(T);
-  if DistanceFrom(P) < 4 then
+  if DistanceFrom(P) < 3 then
   begin
     WriteLn('Located close enough to tile, unable to webwalk!');
     Exit;
@@ -385,6 +387,8 @@ begin
     WalkToTile(Tile(3253, 3421), 1, 0);
   end;
 
+  R_FindRandoms;
+
   P := TileToMS(Tiles[0], 10);
   Mouse(p.x - 7, p.y - 7, 16, 16, False);
   Wait(1+Random(42));
@@ -445,6 +449,15 @@ begin
     repeat
       R_QuickVEB;
       Inc(FailTimes);
+      if DistanceFrom(Tile(3253, 3421)) > 20 then
+      begin
+        WriteLn('Far away, might be random event?');
+        Wait(10+Random(100));
+        if R_FindRandoms then
+          Wait(5000+Random(5000))
+        else
+          Wait(10+Random(100));
+      end;
     until R_BankScreen or R_PinScreen or (FailTimes > 29) or (not LoggedIn);
     if not LoggedIn then
       Exit;
@@ -562,7 +575,7 @@ begin
 
   EMPTY_VIAL_ID      := 229;
   FULL_VIAL_ID       := 227;
-  if (R_CountItem(EMPTY_VIAL_ID) < 1) or (R_CountItem(FULL_VIAL_ID) > 27) or not hInvFull then
+  if (R_CountItem(EMPTY_VIAL_ID) < 1) or (R_CountItem(FULL_VIAL_ID) > 27) then
     Result := True
   else
     Result := False;
@@ -608,7 +621,7 @@ begin
     Exit;
   end;
 
-  for srch := 0 to 3 do // if reflection misclicks pool so it won't wait 2 seconds
+  for srch := 0 to 3 do // if reflection misclicks water so it won't wait 2 seconds
   begin
     LightUpInv;
     //Wasserbrunnen := GetObjectByID(24214, OBJECT_TYPE_INTERACTABLE, 10);
@@ -618,7 +631,7 @@ begin
     begin
       if DebugMe then WriteLn('Empty location, fountain probably offscreen.');
       Wait(10+Random(50));
-      if (DistanceFrom(Tile(3239,3433)) > 5) then
+      if (DistanceFrom(Tile(3239,3433)) > 0) then
         if not Moving then
           r_WebWalkH(Tile(3239,3433));
       Exit;
