@@ -1,11 +1,11 @@
 {///////////////////////////////////////////////////////////////////////////////
 //                                                                            //
-//                    Harry's Port Sarim Willow Cutter v0.1                   //
+//                    Harry's Port Sarim Willow Cutter v0.2                   //
 //                                                                            //
 //   Requirements:                                                            //
 //     Level 30+ woodcutting.                                                 //
 //     Start at willow trees, at Port Sarim (http://i.imgur.com/EtIOp.png)    //
-//     You MUST be wielding your axe. Do NOT have it in the inventory.        //
+//     It is best to be wielding your axe, but not required. Keep in slot 1.  //
 //     Edit the consts below (DeclarePlayers, basic setup.)                   //
 //     Latest Simba with latest SRL and Reflection.                           //
 //                                                                            //
@@ -29,6 +29,7 @@
 //                                                                            //
 //                              Changelog!                                    //
 //    0.1 - Initial release.                                                  //
+//    0.2 - You may now use axes, both wielded and unwielded.                 //
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
@@ -60,7 +61,8 @@ begin
     Name        := 'Username';
     Pass        := 'Password';
     Nick        := 'nickname';
-    Member      := False;
+    Booleans[9] := True; // True if your axe is wielded. False if it's in inventory.
+    Member      := True;
     Active      := True;
   end;
 
@@ -99,8 +101,8 @@ const
 ////////////////////////////////////////////////////////////////////////////////
 
   SCRIPT_NAME        = 'Port Sarim Willow Cutter';
-  SCRIPT_VERSION     = '0.1';
-  SECRET_GOOGLE_CODE = '228z73jazez'; // Ignore this.
+  SCRIPT_VERSION     = '0.2';
+  SECRET_GOOGLE_CODE = 'azsdk28oa'; // Ignore this.
 
 var PlayerSessionTime,ReportTimer,AntiBansGlobal, WillowsCutGlobal, BirdieGlobal,
      WorldLeaveMarker,WorldsHopped, DethWelks, StatsTimer, AtkFasf, notcooldood : integer;
@@ -443,7 +445,10 @@ begin
       Exit;
     end;
     Wait(10+Random(500));
-    Mouse(340, 275, 15, 10, True); // Deposit button, straight from SRL.
+    if Players[CurrentPlayer].Booleans[9] then // is wielded
+      Mouse(340, 275, 15, 10, True) // Deposit button, straight from SRL.
+    else
+      Deposit(2,28,True); // axe in slot 1.
     IncEx(WillowsCutGlobal,28);
     IncEx(Players[CurrentPlayer].Integers[69],28);
     stats_IncVariable('Willow Logs Chopped',28);
@@ -556,6 +561,26 @@ begin
   AntiBan_Short;
   ClickToContinue;
   KeepHealthy;
+  if (Pos('hatchet',GetItemNameAt(1)) = 0) then
+  begin
+    if not Players[CurrentPlayer].Booleans[9] then // axe in inv
+    begin
+      WriteLn('No axe in inv?.. Waiting.');
+      wait(1000+Random(1000));
+      WriteLn('No axe 2x. Gotta kill player.');
+      WriteLn('Please equip an axe next time, it is more "stable".');
+      Players[CurrentPlayer].Loc := 'AxeFail1';
+      NextPlayer(False);
+      Exit;
+    end
+    else
+    if DebugMe then WriteLn('Axe still there!');
+  end else
+  if Players[CurrentPlayer].Booleans[9] then // wielded axe, but one in inv?
+  begin
+    Players[CurrentPlayer].Booleans[9] := False;
+    WriteLn('You have an axe in your inv... please set DeclatePlayer Booleans[9] to False next time.');
+  end;
 
   if WORLD_LEAVE then // Ugly, but was annoying with "True and is not needed" errors.
     if (TimeFromMark(PlayerSessionTime) > WorldLeaveMarker) then
@@ -765,6 +790,7 @@ begin
   if (TmpLvl < 30) and (TmpLvl > 0) then
   begin
     WriteLn('You may not use this script without 30+ woodcutting.');
+    Players[CurrentPlayer].Loc := 'TooLowLvl1';
     NextPlayer(False);
     Exit;
   end;
