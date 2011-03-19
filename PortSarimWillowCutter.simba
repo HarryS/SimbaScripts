@@ -1,0 +1,891 @@
+{///////////////////////////////////////////////////////////////////////////////
+//                                                                            //
+//                    Harry's Port Sarim Willow Cutter v0.1                   //
+//                                                                            //
+//   Requirements:                                                            //
+//     Level 30+ woodcutting.                                                 //
+//     Start at willow trees, at Port Sarim (http://i.imgur.com/EtIOp.png)    //
+//     You MUST be wielding your axe. Do NOT have it in the inventory.        //
+//     Edit the consts below (DeclarePlayers, basic setup.)                   //
+//     Latest Simba with latest SRL and Reflection.                           //
+//                                                                            //
+//   Features:                                                                //
+//     Cuts willows and banks them at the deposit box.                        //
+//     Picks up birds-nests if you are a RS Member.                           //
+//     In the rare chance you die, will death-walk back to Port Sarim.        //
+//     Script is designed to "never stop", should run until a random breaks.  //
+//     QUALITY SCRIPT                                                         //
+//     Auto-updating!                                                         //
+//     Anti-ban modules.                                                      //
+//     World-switches every ~25 minutes.                                      //
+//     Simple to setup and use!                                               //
+//     And much more!                                                         //
+//                                                                            //
+//   Future features (not yet added):                                         //
+//     Lvl 1-29 trainer?                                                      //
+//     Suggest something on the forums!                                       //
+//                                                                            //
+////////////////////////////////////////////////////////////////////////////////
+//                                                                            //
+//                              Changelog!                                    //
+//    0.1 - Initial release.                                                  //
+//                                                                            //
+////////////////////////////////////////////////////////////////////////////////
+//                                                                            //
+//   Script License: WTFPL - Do What The Fuck You Want To Public License.     //
+//                                                                            //
+//      This program is free software. It comes without any warranty, to the  //
+//      extent permitted by applicable law. You can redistribute it and/or    //
+//      modify it under the terms of the Do What The Fuck You Want To Public  //
+//      License, Version 2, as published by Sam Hocevar. See                  //
+//      http://sam.zoy.org/wtfpl/COPYING for more details.                    //
+//                                                                            //
+///////////////////////////////////////////////////////////////////////////////}
+
+program HarrysPSWC;
+{$DEFINE SMART}
+{$i SRL/SRL.scar}
+{$i Reflection/Reflection.simba}
+{$i SRL/SRL/Skill/Magic.scar}
+{$i SRL/SRL/Misc/Stats.simba}
+
+procedure DeclarePlayers;
+begin
+  HowManyPlayers := 1;
+  CurrentPlayer := 0;
+  NumberOfPlayers(HowManyPlayers);
+
+  with Players[0] do
+  begin
+    Name        := 'Username';
+    Pass        := 'Password';
+    Nick        := 'nickname';
+    Member      := False;
+    Active      := True;
+  end;
+
+end;
+
+const
+  SERVER  = 61;     // Enter "0" to pick a random server.
+  SIGNED  = True;  // Use the signed RS-client? Leave at True unless you know what you're doing.
+  MEMBERS = False; // Set to True if using a RS-Members account. False if F2P.
+  WORLD_SWITCH = True; // Switch world when connecting to RS?
+  WORLD_LEAVE = True; // Hop words every ~25 minutes or so. WORLD_SWITCH must be true.
+
+  Autochecken = True; // Automatically check for updates and download the newer version of the script if it gets updated.
+
+  SRLStats_Username = ''; // Your SRL Stats Username (not RS!)
+  SRLStats_Password = ''; // Your SRL Stats Password (not RS!)
+
+////////////////////////////////////////////////////////////////////////////////
+//                                                                            //
+//   End of Basic Setup - you may continue down more IF you know what you're  //
+//          doing. If not, you will probably break something!...              //
+//                                                                            //
+////////////////////////////////////////////////////////////////////////////////
+
+  MOUSE_SPEED              = 15;
+  MOUSE_SPEED_RANDOMNESS   = 7;
+  // Mouse speed will be "MOUSE_SPEED + Random(MOUSE_SPEED_RANDOMNESS);".
+
+  DebugMe = False; // Get advanced debugs of current procedures. Not suggested.
+
+////////////////////////////////////////////////////////////////////////////////
+//                                                                            //
+//   End of Advanced Setup - really, do NOT touch anything below this....     //
+//           or you will probably break something......... :)                 //
+//                                                                            //
+////////////////////////////////////////////////////////////////////////////////
+
+  SCRIPT_NAME        = 'Port Sarim Willow Cutter';
+  SCRIPT_VERSION     = '0.1';
+  SECRET_GOOGLE_CODE = '228z73jazez'; // Ignore this.
+
+var PlayerSessionTime,ReportTimer,AntiBansGlobal, WillowsCutGlobal, BirdieGlobal,
+     WorldLeaveMarker,WorldsHopped, DethWelks, StatsTimer, AtkFasf, notcooldood : integer;
+
+Function r_WebWalkH(T: TTile): Boolean; // JuKKa
+Var
+  I: Integer;
+  M, P: TPoint;
+  CTRLPoints: TPointArray;
+Begin
+  P := TileToPoint(T);
+  if DistanceFrom(P) < 2 then
+  begin
+    WriteLn('Located close enough to tile, unable to webwalk!');
+    Exit;
+  end;
+  Repeat
+    M := GetMyPos;
+    CtrlPoints := r_WindPath(M.x, M.y, P.X, P.Y, 5.0, 2.5, 0.0, 0.0, 4.5, 2.5);
+    For I:= High(CtrlPoints) DownTo 0 Do
+      if WalkToTile(Tile(CtrlPoints[i].x, CtrlPoints[i].y),0, 10) Then
+      Begin
+        Result := I = High(CtrlPoints);
+        R_FindRandoms;
+        Break;
+      End;
+    R_FindRandoms;
+  Until( Result );
+End;
+
+function NotSafeZone: boolean;
+var wTile: TPoint; LagTries,ee: integer;
+begin
+  if (DistanceFrom(Tile(3045, 3246)) > 35) then // PS dock
+  begin
+    Writeln('Detected you away from Port Sarim - waiting a few seconds to know for sure.');
+    Wait(2000+Random(5000));
+    if R_FindRandoms then // Maybe you triggered a random?
+      Wait(10000+Random(5000)) // Anti-lag problems.
+    else
+      Wait(1000+Random(3000));
+    if (DistanceFrom(Tile(3045, 3246)) > 35) then
+      Result := True
+    else
+      Result := False;
+    if Result = False then
+      Exit;
+    if Result then
+    begin
+      WriteLn('You probably ran away from Port Sarim - let''s walk back to it.');
+      wTile := TileToMM(Tile(3059, 3251));
+      if not rs_OnMiniMap(wTile.X, wTile.Y) then
+      begin
+        WriteLn('Tile doesn''t exist, o noes! Might you be in lubmy?');
+        Result := True;
+        if (DistanceFrom(Tile(3222,3219)) < 50) then
+        begin
+          WriteLn('You are in the Lubmy area. Let''s walk back to the bank.');
+          // Deathwalk stuff.
+          for ee := 1 to 3 do
+            R_ClickItem(ee, True, '');
+          Inc(DethWelks);
+          R_WebWalkH(Tile(3235, 3219)); // Lumby east int
+          r_FFlag(0);
+          R_WebWalkH(Tile(3218, 3247)); // Lumby north gen store
+          r_FFlag(5+Random(5)-Random(5));
+          R_WebWalkH(Tile(3078, 3249)); // draynor bank
+          r_FFlag(5+Random(5)-Random(5));
+          R_WebWalkH(Tile(3071, 3276)); // leave draynor
+          r_FFlag(5+Random(5)-Random(5));
+          R_WebWalkH(Tile(3065, 3275)); // leave draynor west
+          r_FFlag(0);
+          R_WebWalkH(Tile(3059, 3251)); // trees!
+          r_FFlag(0);
+          SetAngle(True);
+          WriteLn('How does I reflection deathwalk? :D');
+          if (DistanceFrom(Tile(3059, 3251)) < 35) then
+            Result := False
+          else
+            Result := True;
+          Exit;
+        end;
+        if TabExists(Tab_Magic) then
+        begin
+          WriteLn('We have the power to teleabort!');
+          GameTab(Tab_Magic);
+          Cast('lumbridge home teleport', False);
+          Wait(2000+Random(2000));
+          if IsChatBoxTextAnyLine('another',0) then
+          begin
+            WriteLn('Teleabort timer-blocked! Other user can take the lead.');
+            Result := False;
+            NextPlayer(True);
+            Exit;
+          end;
+          Wait(15000+Random(10000));
+          WriteLn('(Probably) back in lumby via teleport!');
+          if (DistanceFrom(Tile(3222,3219)) < 50) then
+          begin
+            Inc(DethWelks);
+            R_WebWalkH(Tile(3235, 3219)); // Lumby east int
+            r_FFlag(0);
+            R_WebWalkH(Tile(3218, 3247)); // Lumby north gen store
+            r_FFlag(5+Random(5)-Random(5));
+            R_WebWalkH(Tile(3078, 3249)); // draynor bank
+            r_FFlag(5+Random(5)-Random(5));
+            R_WebWalkH(Tile(3071, 3276)); // leave draynor
+            r_FFlag(5+Random(5)-Random(5));
+            R_WebWalkH(Tile(3065, 3275)); // leave draynor west
+            r_FFlag(0);
+            R_WebWalkH(Tile(3059, 3251)); // trees!
+            r_FFlag(0);
+            WriteLn('How does I reflection deathwalk?');
+            SetAngle(True);
+          end;
+          Result := False;
+          Exit;
+        end;
+        Exit;
+      end
+      else
+      begin
+        WriteLn('Tile found, walking to it.');
+        repeat
+          Inc(LagTries);
+          Mouse(wTile.x, wTile.y, 1, 1, true);
+          Wait(RandomRange(3000, 5000));
+        until (LagTries > 3) or (DistanceFrom(Tile(3059, 3251)) < 7);
+        if LagTries > 3 then
+        begin
+          WriteLn('Could not get back to the willows, we failed.');
+          Result := True;
+          Exit;
+        end
+        else
+        begin
+          WriteLn('We got back to the willows, hell yeah!');
+          Result := False;
+          Exit;
+        end;
+      end;
+    end;
+  end else
+  begin
+    if DebugMe then WriteLn('You be there!');
+    Result := False;
+  end;
+end;
+
+function hInvFull: Boolean; // n3s
+begin
+  if (not LoggedIn) or LobbyScreen then
+  begin
+    Result := False;
+    Exit;
+  end;
+  Result := (InvCount = 28);
+end;
+
+procedure HopelesslyLost;
+begin
+  if NotSafeZone then
+  begin
+    if not LoggedIn or LobbyScreen then
+    begin
+      WriteLn('Not logged in, might you be at lobby screen?');
+      if LobbyScreen then
+      begin
+        writeLn('Not logged in, but at lobby screen - there is a chance you''re not broken.');
+        writeLn('Probably not broken - nextplayer true.');
+        LeaveLobby;
+        NextPlayer(True);
+        Exit;
+      end;
+      writeLn('Not logged in - there is a chance you''re not broken.');
+      writeLn('Probably not broken - nextplayer true.');
+      NextPlayer(True);
+      Exit;
+    end else
+    begin
+      writeLn('Reflection tiles say you''re not near the Port and logged in.');
+      writeLn('In random or broken; logging out for your saftey - nextplayer false.');
+      Players[CurrentPlayer].Rand := 'PlayerLost1';
+      nextPlayer(False);
+      Exit;
+    end;
+  end;
+end;
+
+procedure RandomRClickH; // phantombmx/EvilChicken - removed inv clicking
+var
+  M: Byte;
+  Inv: Boolean;
+begin
+  if (not LoggedIn) then exit;
+  M := MouseSpeed;
+  MouseSpeed := 7 + Random(25);
+  MouseBox(MSX1, MSY1, MIX2, MIY2, 2)
+  if (Random(3) > 0) then
+    Inv := ChooseOption('xamine');
+  if (not Inv) then ChooseOption('ancel');
+  MouseSpeed := M;
+end;
+
+procedure AntiBan_Short;
+begin
+  case (Random(400)) of
+    0: RandomRClickH;
+    1: MouseSpeed := MOUSE_SPEED + Random(MOUSE_SPEED_RANDOMNESS);
+    2: PickUpMouse;
+    3..400: begin
+      Wait(100 + Random(50));
+      Exit;
+    end;
+  end;
+  Inc(Players[CurrentPlayer].Integers[2]);
+  Inc(AntiBansGlobal);
+//  Inc(Stats_CustomVars[2]);
+end;
+
+function rInFight: boolean; // By Narcle
+var
+ T: Integer;
+begin
+  T := GetSystemTime + 2405;
+  if (not LoggedIn) or LobbyScreen then
+  begin
+    Result := False;
+    Exit;
+  end;
+  repeat
+    wait(66)
+    if (GetAnimation > -1) then
+      Result := true;
+  until Result or (GetSystemTime > T);
+end;
+
+function R_QuickPSDB: Boolean;
+var
+  Tiles: TPointArray;
+  P: TPoint;
+  Tries,bwait,impatient,bx,by: Integer;
+begin
+  Result := R_DepositBoxScreen;
+  Tries := 0;
+  if Result then Exit;
+
+  Tiles := [Point(3047,3239)];
+
+  SortTPAFrom(Tiles, GetMyPos);
+  if (DistanceFrom(Tiles[0]) > 3) or not TileOnMS(Tiles[0], 600) then
+  begin
+    if not(TileOnMM(Tiles[0])) then
+    begin
+      WriteLn('Could not find Bank Booth.');
+      Exit;
+    end;
+    WalkToTile(Tiles[0], 0, 9);
+    Wait(1+Random(42));
+  end;
+  if not(TileOnMS(Tiles[0], 600)) then
+  begin
+    MarkTime(Bwait);
+    repeat
+      Wait(1+Random(42));
+      if TimeFromMark(Bwait) > 5000 then
+      begin
+        WriteLn('Tired of waiting for bank, exit!');
+        Exit;
+      end;
+    until (TileOnMS(Tiles[0], 600));
+  end;
+
+  R_FindRandoms;
+
+  P := TileToMS(Tiles[0], 10);
+  MMouse(p.x - 7, p.y - 7, 16, 16);
+  GetMousePos(bx,by);
+  Wait(1+Random(12));
+  if r_isUpText('eposit ') then
+  begin
+    Mouse(bx,by,0,0,True);
+    repeat
+      MarkTime(impatient);
+      while not R_DepositBoxScreen do
+      begin
+        Wait(10+Random(42));
+        if TimeFromMark(impatient) > 9001 then
+        begin
+          writeln('Too long waiting...');
+          Break;
+        end;
+      end;
+      Inc(Tries);
+      Result := R_DepositBoxScreen;
+    until Result or (Tries > 1);
+  end;
+  writeln('Yay, opened deposit box.');
+end;
+
+function BankinDat(whereto: string): boolean;
+var FailTimes,PinFails: integer;
+begin
+  if whereto = 'leave' then
+  begin
+    Wait(100+Random(422)+Random(422));
+    WriteLn('Emptied inv, get to the willows!');
+    r_WebWalkH(Tile(3059, 3251));
+    //r_FFlag(8);
+    Exit;
+  end else
+  begin
+    r_WebWalkH(Tile(3047,3236)); // PSDB tile
+    R_FFlag(0);
+    wait(100+Random(500));
+    FailTimes := 0;
+    PinFails := 0;
+    repeat
+      R_QuickPSDB;
+      Inc(FailTimes);
+      if DistanceFrom(Tile(3047,3236)) > 20 then
+      begin
+        WriteLn('Far away, might be random event?');
+        Wait(10+Random(100));
+        if R_FindRandoms then
+          Wait(5000+Random(5000))
+        else
+          Wait(10+Random(100));
+      end;
+    until R_DepositBoxScreen or (FailTimes > 29) or (not LoggedIn);
+    if not LoggedIn then
+      Exit;
+    if (FailTimes > 29) then
+    begin
+      WriteLn('Banking failed to find bank. Gonna kill your player for your saftey.');
+      Players[CurrentPlayer].Rand := 'FailBankFind1';
+      CloseBank;
+      Logout;
+      NextPlayer(False);
+      Exit;
+    end;
+    Wait(10+Random(500));
+    Mouse(340, 275, 15, 10, True); // Deposit button, straight from SRL.
+    IncEx(WillowsCutGlobal,28);
+    IncEx(Players[CurrentPlayer].Integers[69],28);
+    stats_IncVariable('Willow Logs Chopped',28);
+    IncEx(Players[CurrentPlayer].Integers[68],1890);
+    stats_IncVariable('Total EXP Gained', 1890); // 67.5 exp per willow
+    Wait(10+Random(500));
+    Wait(1+Random(42));
+    Result := True;
+    BankinDat('leave');
+    Exit;
+  end;
+end;
+
+procedure KeepHealthy;
+var maximumtrolling: integer; current: string;
+begin
+  current := 'durr';
+  maximumtrolling := GetMMLevels('run',current);
+  case current of
+    'Orange','Yellow','Green': SetRun(True);
+  end;
+end;
+
+function Moving: boolean;
+var Speed: integer;
+begin
+  Speed := GetSpeed;
+  if Speed < 1 then
+    Result := False
+  else
+    Result := True;
+end;
+
+function GetObjectByIDH(IDs: TIntegerArray; objType, MaxDist: Integer): TRSObject;
+var
+   f: Integer;
+   TP: TTile;
+   TileObject: TRSObject;
+   TPA: TPointArray;
+begin
+  TP := GetMyPos;
+  TPA := SortedCircleTPA(TileToPoint(TP), MaxDist);
+  if length(TPA) < 1 then Exit;
+  for f := 0 to High(TPA) do
+  begin
+    TileObject := GetObjectAt(Tile(TPA[f].x, TPA[f].y), objType);
+    if (not (TileObject = NULL_RSOBJECT) and InIntArray(IDs, TileObject.ID)) and TileOnMS(TileObject.Tile, 1300) then
+    begin
+      Result := TileObject;
+      Exit;
+    end;
+  end;
+end;
+
+procedure BirdieNest;
+var
+  Items: TGroundItemArray;
+  TempMS: TPoint;
+  iPad: Integer;
+begin
+  if Players[CurrentPlayer].Member = False then
+    Exit;
+  if not LoggedIn then
+    Exit;
+  if Random(2) = 0 then // Don't need it every time.
+    Exit;
+  Items := GetItemsNear(3);
+  if GetArrayLength(Items) > 0 then
+  begin
+    for iPad := 0 to high(items) do // Make this more efficient later.
+      if (items[iPad].ID = 5070) or (items[iPad].ID = 5071) or
+        (items[iPad].ID = 5072) or (items[iPad].ID = 5073) or
+        (items[iPad].ID = 5074) or (items[iPad].ID = 5075) or
+        (items[iPad].ID = 5076) or (items[iPad].ID = 5077) or
+        (items[iPad].ID = 5078) or (items[iPad].ID = 7413) or
+        (items[iPad].ID = 11966) then
+      begin
+        TempMS := TileToMSEx(Items[iPad].Tile, 0.5, 0.5, 0);
+        Mouse(TempMS.X, TempMS.Y, 5, 5, false);
+        if R_WaitOption('Bird', 1000) then
+        begin
+          WriteLn('Got birds nest!');
+          stats_IncVariable('Bird Nest',1);
+          Inc(BirdieGlobal);
+        end
+        else
+          WriteLn('Failed to grab nest. sadfrog.');
+        R_FFlag(0);
+        Wait(500+Random(2000));
+      end;
+  end;
+end;
+
+
+function FindVictim: Boolean;
+var
+  Weidenbaum,curstump: TRSObject;
+  P, curtile: TPoint;
+  srch,KillFailsafe,lx,ly,PreWalk: integer;
+begin
+  Result := False;
+  if not LoggedIn or LobbyScreen then
+    Exit;
+
+  if hInvFull then
+    BankinDat('okaydude');
+
+  Wait(50+Random(100));
+  R_FindRandoms;
+  AntiBan_Short;
+  ClickToContinue;
+  KeepHealthy;
+
+  if WORLD_LEAVE then // Ugly, but was annoying with "True and is not needed" errors.
+    if (TimeFromMark(PlayerSessionTime) > WorldLeaveMarker) then
+    begin
+      WriteLn('Time''s up! Switching world.');
+      Inc(WorldsHopped);
+      if HowManyPlayers = 1 then
+        ChangeWorld(RandomWorld(Players[CurrentPlayer].Member, False))
+      else
+        NextPlayer(True);
+    end;
+
+  PreWalk := 0;
+
+  if (DistanceFrom(Tile(3222,3219)) < 50) then // Lumby
+  begin
+    WriteLn('In Lumbridge!');
+    Exit;
+  end;
+
+  for srch := 0 to 3 do // if reflection misclicks tree so it won't wait 2 seconds
+  begin
+    Weidenbaum := GetObjectByIDH([5551,5552,5553], OBJECT_TYPE_INTERACTABLE, 15);
+    P := TileToMS(Weidenbaum.Tile, 1300);
+    if (toStr(P.X) = '-1') or (toStr(P.Y) = '-1') then
+    begin
+      if DebugMe then WriteLn('Empty location, tree probably offscreen.');
+      Wait(10+Random(50));
+      if (DistanceFrom(Tile(3059, 3251)) > 2) then
+        if not Moving then
+          r_WebWalkH(Tile(3059, 3251));
+      Exit;
+    end;
+    if not TileOnMS(P, 1300) then
+      if P = Tile(-1, -1) then
+        if not Moving then
+          R_WebWalkH(Tile(3059, 3251));
+
+
+    MMouse(P.X, P.Y, 30, 30);
+    GetMousePos(lx,ly);
+    Wait(1+Random(5));
+    if R_IsUpText('illow ') then
+    begin
+      Mouse(lx,ly,0,0,True);
+      curtile := Weidenbaum.Tile;
+      Result := r_WaitCrossHairColor(CROSSHAIR_RED, 1000+Random(100)-Random(100));
+      if Result then
+        AtkFasf := 0;
+    end;
+
+    Inc(AtkFasf);
+    //writeln(tostr(atkfasf));
+    if AtkFasf > 30 then
+    begin
+      WriteLn('Failed to find tree 30 times... Something might be bad.');
+      AtkFasf := 0;
+      Inc(notcooldood);
+      if (DistanceFrom(Tile(3059, 3251)) < 50) then
+        if not Moving then
+          r_WebWalkH(Tile(3060, 3253));
+      if notcooldood > 1 then
+        if TabExists(Tab_Magic) then
+        begin
+          WriteLn('We have the power to teleabort!');
+          GameTab(Tab_Magic);
+          Cast('lumbridge home teleport', False);
+          Wait(2000+Random(2000));
+          if IsChatBoxTextAnyLine('another',0) then
+          begin
+            WriteLn('Teleabort timer-blocked! Other user can take the lead.');
+            Result := False;
+            NextPlayer(True);
+            Exit;
+          end;
+          Wait(15000+Random(10000));
+          if (DistanceFrom(Tile(3222,3219)) < 50) then
+          begin
+            WriteLn('Back at home Lumby.');
+            notcooldood := 0;
+            Exit;
+          end;
+          WriteLn('Something is very FUBAR with your player. He will be executed now.');
+          Players[CurrentPlayer].Rand := 'FUBAR90x';
+          Logout;
+          NextPlayer(False);
+          Exit;
+        end;
+    end;
+
+    if Result then
+    begin
+      AtkFasf := 0;
+      notcooldood := 0;
+      if (R_FlagExists) then
+        R_Flag;
+      MarkTime(KillFailsafe);
+      repeat
+        if DebugMe then writeLn('we choppin');
+        Wait(10+Random(100));
+        R_FindRandoms;
+        AntiBan_Short;
+        BirdieNest;
+        curstump := GetObjectAt(curtile,OBJECT_TYPE_INTERACTABLE);
+        if (curstump.ID = 5554) then // Thanks Emaziz!
+        begin
+          if DebugMe then WriteLn('Stumped!');
+          Break;
+        end;
+      until (not rInFight) or (TimeFromMark(KillFailsafe) > 120000) or (hInvFull); // 2 minutes
+      if (not loggedIn) or LobbyScreen then Exit;
+      if (TimeFromMark(KillFailsafe) > 120000) then
+      begin
+        writeLn('Took too long to cut tree, breaking out!')
+        wait(3000+Random(10000));
+      end
+      else
+      begin
+        if DebugMe then WriteLn('TREE HAS BEEN CHOPPED');
+        Wait(10+Random(42));
+      end;
+      if hInvFull then
+        BankinDat('YOOOOOOO');
+      Exit;
+    end;
+  end;
+end;
+
+procedure PrintReports;
+var
+  QC: array [0..1] of TStringArray; // Query = 0, Counter = 1.
+  I, II: Byte;
+begin
+  //ClearDebug;
+  WriteLn('[REPORT]');
+  SRLRandomsReport;
+  WriteLn('');
+
+  for II := 0 to 1 do
+    SetArrayLength(QC[II], 4);
+
+  QC[0] := ['Total runtime:',
+    'Players active:',
+    'Total willows cut:',
+    '-> Willows cut per hour:'];
+  QC[1] := [TimeRunning,
+    ToStr(PlayersActive) + ' out of ' + ToStr(HowManyPlayers),
+    ToStr(WillowsCutGlobal),
+    ToStr((3600 * (WillowsCutGlobal)) div (GetTimeRunning div 1000 + 1))];
+
+  WriteLn('<!---');
+  WriteLn('<! ' + Padr('Harry''s ' + SCRIPT_NAME, 33) + 'v' + SCRIPT_VERSION);
+  WriteLn('<!---');
+
+  II := High(QC[0]);
+  for I := 0 to II do
+    WriteLn('<! ' + Padr(QC[0][I], 32) + QC[1][I]);
+
+  WriteLn('<!---');
+  WriteLn('<! ## | Nick | A | LogsCut/Hr: | ExpGain/Hr: | Rand:')
+
+  for I := 0 to HowManyPlayers - 1 do
+    WriteLn('<! ' + Padr(ToStr(I),                                 3) +
+      '| ' + Padr(Copy(Players[I].Nick, 1, 4),                     5) +
+      '| ' + Padr(ToStr(Players[I].Active)[1],                     2) +
+      '| ' + Padr(ToStr(Players[I].Integers[69])+'/'+ToStr((3600 * (Players[I].Integers[69])) div (GetTimeRunning div 1000 + 1)),12) +
+      '| ' + Padr(toStr(Players[CurrentPlayer].Integers[68])+'/'+ToStr((3600 * (Players[I].Integers[68])) div (GetTimeRunning div 1000 + 1)),12) +
+      '| ' + Players[I].Rand);
+
+  WriteLn('<! Total anti-ban procedures run: '+ inttostr(AntiBansGlobal));
+  if WORLD_LEAVE then
+    WriteLn('<! World-hop in: '+ tostr(((Worldleavemarker + PlayerSessionTime) - (GetSystemTime)) div 60000) +' minutes.');
+  if DethWelks > 0 then
+    WriteLn('<! Death-walked '+toStr(DethWelks)+' times.');
+  if BirdieGlobal > 0 then
+    WriteLn('<! Bird Nests picked up: '+toStr(BirdieGlobal)+'.');
+
+  if (TimeFromMark(StatsTimer) > 360000) then // 6 minutes.
+  begin
+    Stats_Commit;
+    MarkTime(StatsTimer);
+    WriteLn('<! Sent stats in!');
+  end;
+
+  if (SRLStats_Username = '') then
+    WriteLn('<! Please consider getting your own stats username @ http://stats.villavu.com');
+
+  WriteLn('<!---');
+  WriteLn('[/REPORT]');
+end;
+
+procedure Player_OnLogIn;
+var TmpLvl: integer;
+begin
+  Wait(100+Random(2000));
+  if (R_FindRandoms) then
+    if (not Players[CurrentPlayer].Active) then
+    begin
+      WriteLn('Player is in a random.');
+      LogOut;
+      Players[CurrentPlayer].Active := False;
+      Players[CurrentPlayer].Status := 'InRandom';
+      Exit;
+    end;
+
+  TmpLvl := R_GetSkillLevel(Skill_Woodcutting);
+  if (TmpLvl < 30) and (TmpLvl > 0) then
+  begin
+    WriteLn('You may not use this script without 30+ woodcutting.');
+    NextPlayer(False);
+    Exit;
+  end;
+  MarkTime(PlayerSessionTime);
+  WorldLeaveMarker := (2100000 + Random(1500000) - Random(1500000)); // 2100000 ms = 35 minutes. 1500000 ms = 25 minutes. Add and subtract the 25 minutes from 35 giving a huge change of randomness for world-switching.
+  //Writeln(tostr(worldleavemarker));
+  SetAngle(True);
+  SetRun(True);
+end;
+
+procedure Autoupdateme;
+var ClientUp, Neifile:integer;
+    OnlineVersion, NewScript, NeiFeilNennen:string;
+begin
+  if Autochecken then
+  begin
+    writeln('Checking for script updates...');
+    ClientUp := InitializeHTTPClient(False, False);
+    SetHTTPUserAgent(ClientUp,'Simba ' + SCRIPT_VERSION);
+    OnlineVersion := GetHTTPPage(ClientUp,'http://harry.lu/srl/pswc-version.txt');
+    writeln(onlineversion);
+    writeln(script_version)
+    FreeHTTPClient(ClientUp);
+    if (Length(trim(OnlineVersion)) = 3) and (trim(OnlineVersion) > SCRIPT_VERSION) then
+    begin
+      writeLn('Newer script version online!');
+      writeLn('Autoupdating to newer version.');
+      ClientUp := InitializeHTTPClient(False,False);
+      SetHTTPUserAgent(ClientUp,'Simba');
+      NewScript := GetHTTPPage(ClientUp,'http://harry.lu/srl/pswc-current.txt');
+      FreeHTTPClient(ClientUp);
+
+      NeiFeilNennen := AppPath + SCRIPT_NAME + ' v'+trim(OnlineVersion)+' [Pub] by Harry.simba';
+      Neifile := Rewritefile(NeiFeilNennen, true);
+      try
+        WriteFileString(Neifile, NewScript);
+      except
+        begin
+          writeLn('Fatal error writing to '+NeiFeilNennen+'!!');
+          terminatescript;
+        end;
+      end;
+      CloseFile(Neifile);
+      writeLn('New script downloaded and saved at '+NeiFeilNennen+' !! Please use this!');
+      TerminateScript;
+    end else
+    begin
+      if (Length(trim(OnlineVersion)) <> 3) then
+        WriteLn('Version checking failed (debug: length was not equal), you might be outdated.')
+        else writeLn('You have the latest version of the script!');
+      exit;
+    end;
+  end else
+    WriteLn('!!!!! Not checking for latest version, you may be outdated!');
+end;
+
+procedure SetUpScript;
+var
+  i: Integer;
+begin
+  ClearDebug;
+
+  Smart_Server := SERVER;
+  Smart_Signed := SIGNED;
+  Smart_Members:= MEMBERS;
+
+  Autoupdateme;
+
+  SetUpSRL;
+  Reincarnate := True;
+  DeclarePlayers;
+  SetUpReflectionEx(True);
+
+  if (SRLStats_Username = '') then
+    SetupSRLStats(68, 'Anonymous', 'anon1337')
+  else
+    SetupSRLStats(68, SRLStats_Username, SRLStats_Password);
+
+  MouseSpeed := MOUSE_SPEED + Random(MOUSE_SPEED_RANDOMNESS);
+  SRL_Procs[srl_AntiBan] := @AntiBan_Short;
+  SRL_Procs[srl_OnLogIn] := @Player_OnLogIn;
+
+  for i := 0 to High(Players) do
+  begin
+    if (WORLD_SWITCH) then
+      Players[i].WorldInfo := [Players[i].Member, -1, False];
+    Players[i].Integers[4] := 1;
+  end;
+
+  ActivateClient;
+  Wait(1000 + Random(2000));
+end;
+
+procedure MainLoop;
+begin
+  LogInPlayer;
+
+  repeat
+    repeat
+      if(TimeFromMark(ReportTimer) > 60000)then // 1 minute
+      begin
+        PrintReports;
+        MarkTime(ReportTimer);
+      end;
+      HopelesslyLost;
+      FindVictim;
+      if (not LoggedIn) or LobbyScreen then
+      begin
+        Wait(5000+Random(5000));
+        if (not LoggedIn) or LobbyScreen then Break else Wait(1);
+      end;
+    until(False);
+    if LobbyScreen then
+      LeaveLobby;
+
+    WriteLn('Detected as logged out, NPlayer');
+    NextPlayer(Players[CurrentPlayer].Active);
+  until False;
+end;
+
+begin
+  SetUpScript;
+  MainLoop;
+end.
