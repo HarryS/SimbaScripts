@@ -1,16 +1,17 @@
 {///////////////////////////////////////////////////////////////////////////////
 //                                                                            //
-//                    Harry's Port Sarim Willow Cutter v0.3                   //
+//                   Harry's Port Sarim Whatever Cutter v0.4                  //
 //                                                                            //
 //   Requirements:                                                            //
-//     Level 30+ woodcutting.                                                 //
-//     Start at willow trees, at Port Sarim (http://i.imgur.com/EtIOp.png)    //
+//     Level 1+ woodcutting, axe wielded or in first inventory slot.          //
+//     Start near willow trees, at Port Sarim (http://i.imgur.com/EtIOp.png)  //
 //     It is best to be wielding your axe, but not required. Keep in slot 1.  //
 //     Edit the consts below (DeclarePlayers, basic setup.)                   //
 //     Latest Simba with latest SRL and Reflection.                           //
 //                                                                            //
 //   Features:                                                                //
-//     Cuts willows and banks them at the deposit box.                        //
+//     Cuts: trees (levels 1-14), oaks (levels 15-29), willows (levels 30-99) //
+//             and banks them at the deposit box a few clicks to the south.   //
 //     Picks up birds-nests if you are a RS Member.                           //
 //     In the rare chance you die, will death-walk back to Port Sarim.        //
 //     Script is designed to "never stop", should run until a random breaks.  //
@@ -22,7 +23,7 @@
 //     And much more!                                                         //
 //                                                                            //
 //   Future features (not yet added):                                         //
-//     Lvl 1-29 trainer?                                                      //
+//     "Looting" other bot's dropped logs - not worth it I think.             //
 //     Suggest something on the forums!                                       //
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
@@ -31,6 +32,8 @@
 //    0.1 - Initial release.                                                  //
 //    0.2 - You may now use axes, both wielded and unwielded.                 //
 //    0.3 - Tree finding should be a lot more accurate now.                   //
+//    0.4 - Proper checking if you don't have an axe anymore.                 //
+//            Level 1-29 trainer! Any person with an axe will work now!       //
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
@@ -101,11 +104,12 @@ const
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
 
-  SCRIPT_NAME        = 'Port Sarim Willow Cutter';
-  SCRIPT_VERSION     = '0.3';
+  SCRIPT_NAME        = 'Port Sarim Whatever Cutter';
+  SCRIPT_VERSION     = '0.4';
 
 var PlayerSessionTime,ReportTimer,AntiBansGlobal, WillowsCutGlobal, BirdieGlobal,
-     WorldLeaveMarker,WorldsHopped, DethWelks, StatsTimer, AtkFasf, notcooldood : integer;
+     WorldLeaveMarker,WorldsHopped, DethWelks, StatsTimer, AtkFasf, notcooldood,
+     PowerTmp : integer;
 
 Function r_WebWalkH(T: TTile): Boolean; // JuKKa
 Var
@@ -127,6 +131,7 @@ Begin
       Begin
         Result := I = High(CtrlPoints);
         R_FindRandoms;
+        LeaveDangerZone;
         Break;
       End;
     R_FindRandoms;
@@ -136,7 +141,7 @@ End;
 function NotSafeZone: boolean;
 var wTile: TPoint; LagTries,ee: integer;
 begin
-  if (DistanceFrom(Tile(3045, 3246)) > 35) then // PS dock
+  if (DistanceFrom(Tile(3045, 3246)) > 50) then // PS dock
   begin
     Writeln('Detected you away from Port Sarim - waiting a few seconds to know for sure.');
     Wait(2000+Random(5000));
@@ -144,7 +149,7 @@ begin
       Wait(10000+Random(5000)) // Anti-lag problems.
     else
       Wait(1000+Random(3000));
-    if (DistanceFrom(Tile(3045, 3246)) > 35) then
+    if (DistanceFrom(Tile(3045, 3246)) > 50) then
       Result := True
     else
       Result := False;
@@ -175,7 +180,10 @@ begin
           r_FFlag(5+Random(5)-Random(5));
           R_WebWalkH(Tile(3065, 3275)); // leave draynor west
           r_FFlag(0);
-          R_WebWalkH(Tile(3059, 3251)); // trees!
+          case Players[CurrentPlayer].Strings[7] of
+            'normal','oak': R_WebWalkH(Tile(3037, 3270));
+            else R_WebWalkH(Tile(3059, 3251)); // willow trees!
+          end;
           r_FFlag(0);
           SetAngle(True);
           WriteLn('How does I reflection deathwalk? :D');
@@ -213,7 +221,10 @@ begin
             r_FFlag(5+Random(5)-Random(5));
             R_WebWalkH(Tile(3065, 3275)); // leave draynor west
             r_FFlag(0);
-            R_WebWalkH(Tile(3059, 3251)); // trees!
+            case Players[CurrentPlayer].Strings[7] of
+              'normal','oak': R_WebWalkH(Tile(3037, 3270));
+              else R_WebWalkH(Tile(3059, 3251)); // willow trees!
+            end;
             r_FFlag(0);
             WriteLn('How does I reflection deathwalk?');
             SetAngle(True);
@@ -411,8 +422,11 @@ begin
   if whereto = 'leave' then
   begin
     Wait(100+Random(422)+Random(422));
-    WriteLn('Emptied inv, get to the willows!');
-    r_WebWalkH(Tile(3059, 3251));
+    WriteLn('Emptied inv, get to the trees!');
+    case Players[CurrentPlayer].Strings[7] of
+      'normal','oak': R_WebWalkH(Tile(3037, 3270));
+      else R_WebWalkH(Tile(3059, 3251));
+    end;
     //r_FFlag(8);
     Exit;
   end else
@@ -453,9 +467,26 @@ begin
       Deposit(2,28,True); // axe in slot 1.
     IncEx(WillowsCutGlobal,28);
     IncEx(Players[CurrentPlayer].Integers[69],28);
-    stats_IncVariable('Willow Logs Chopped',28);
-    IncEx(Players[CurrentPlayer].Integers[68],1890);
-    stats_IncVariable('Total EXP Gained', 1890); // 67.5 exp per willow
+    case Players[CurrentPlayer].Strings[7] of
+      'normal':
+      begin
+        stats_IncVariable('Normal Logs Chopped',28);
+        IncEx(Players[CurrentPlayer].Integers[68], 700);
+        stats_IncVariable('Total EXP Gained', 700); // 37.5 exp per normal
+      end;
+      'oak':
+      begin
+        stats_IncVariable('Oak Logs Chopped',28);
+        IncEx(Players[CurrentPlayer].Integers[68],1050);
+        stats_IncVariable('Total EXP Gained', 1050); // 37.5 exp per oak
+      end;
+      else
+      begin
+        stats_IncVariable('Willow Logs Chopped',28);
+        IncEx(Players[CurrentPlayer].Integers[68],1890);
+        stats_IncVariable('Total EXP Gained', 1890); // 67.5 exp per willow
+      end;
+    end;
     Wait(10+Random(500));
     Wait(1+Random(42));
     Result := True;
@@ -544,6 +575,37 @@ begin
   end;
 end;
 
+procedure CheckPowerLevels;
+var TmpLvl: integer;
+begin
+  if not LoggedIn or LobbyScreen then
+    Exit;
+  TmpLvl := R_GetSkillLevel(Skill_Woodcutting);
+  Inc(PowerTmp);
+  case TmpLvl of
+    1..15: Players[CurrentPlayer].Strings[7] := 'normal';
+    15..29: Players[CurrentPlayer].Strings[7] := 'oak';
+    30..99: Players[CurrentPlayer].Strings[7] := 'willow';
+    else
+    begin
+      WriteLn('Failed to get current skill level...');
+      if PowerTmp > 5 then
+      begin
+        WriteLn('Failed 6x skil grabbing. Something is wrong.');
+        Players[CurrentPlayer].Loc := 'FailSkillGrab1';
+        NextPlayer(False);
+        Exit;
+      end
+      else
+      begin
+        Wait(1000+Random(3000));
+        CheckPowerLevels;
+        Exit;
+      end;
+    end;
+  end;
+  PowerTmp := 0; // If it didn't fail.
+end;
 
 function FindVictim: Boolean;
 var
@@ -561,8 +623,17 @@ begin
   Wait(50+Random(100));
   R_FindRandoms;
   AntiBan_Short;
-  ClickToContinue;
+  if ClickToContinue then
+    CheckPowerLevels;
   KeepHealthy;
+  if Random(2) = 0 then
+    if IsChatBoxTextAnyLine('hatchet which',0) then
+    begin
+      WriteLn('Chat claims you don''t have an axe anymore, or your level is too low. NP(False);');
+      Players[CurrentPlayer].Loc := 'NoAxe1';
+      NextPlayer(False);
+      Exit;
+    end;
   if (Pos('hatchet',GetItemNameAt(1)) = 0) then
   begin
     if not Players[CurrentPlayer].Booleans[9] then // axe in inv
@@ -605,33 +676,77 @@ begin
 
   for srch := 0 to 3 do // if reflection misclicks tree so it won't wait 2 seconds
   begin
-    Weidenbaum := GetObjectByIDH([5551,5552,5553], OBJECT_TYPE_INTERACTABLE, 15);
+    case Players[CurrentPlayer].Strings[7] of
+      'normal': Weidenbaum := GetObjectByIDH([1276,1277,1278,1280], OBJECT_TYPE_INTERACTABLE, 15);
+      'oak': Weidenbaum := GetObjectByIDH([1281], OBJECT_TYPE_INTERACTABLE, 15);
+      else Weidenbaum := GetObjectByIDH([5551,5552,5553], OBJECT_TYPE_INTERACTABLE, 15); // Willow
+    end;
     P := TileToMSEx(Weidenbaum.Realtile,-0.3,0.6,300);
     if (toStr(P.X) = '-1') or (toStr(P.Y) = '-1') then
     begin
       if DebugMe then WriteLn('Empty location, tree probably offscreen.');
       Wait(10+Random(50));
-      if (DistanceFrom(Tile(3059, 3251)) > 2) then
-        if not Moving then
-          r_WebWalkH(Tile(3059, 3251));
+      case Players[CurrentPlayer].Strings[7] of
+        'normal','oak':
+        if (DistanceFrom(Tile(3037, 3270)) > 2) then
+          if not Moving then
+            R_WebWalkH(Tile(RandomRange(3033,3040), RandomRange(3267,3273)));
+        else
+          if (DistanceFrom(Tile(3059, 3251)) > 2) then
+            if not Moving then
+              r_WebWalkH(Tile(3059, 3251));
+      end;
       Exit;
     end;
     if not TileOnMS(P, 300) then
       if P = Tile(-1, -1) then
         if not Moving then
-          R_WebWalkH(Tile(3059, 3251));
+          case Players[CurrentPlayer].Strings[7] of
+            'normal','oak': R_WebWalkH(Tile(3037, 3270));
+            else R_WebWalkH(Tile(3059, 3251));
+          end;
 
-    if not R_IsUpText('illow ') then
-      MMouse(P.X, P.Y, 27, 27);
+    case Players[CurrentPlayer].Strings[7] of
+      'normal':
+      if not R_IsUpText('own Tree') then
+        MMouse(P.X, P.Y, 17, 17);
+      'oak':
+      if not R_IsUpText('own Oak') then
+        MMouse(P.X, P.Y, 17, 17);
+      else
+      if not R_IsUpText('illow ') then
+        MMouse(P.X, P.Y, 27, 27);
+    end;
     GetMousePos(lx,ly);
     Wait(1+Random(5));
-    if R_IsUpText('illow ') then
-    begin
-      Mouse(lx,ly,0,0,True);
-      curtile := Weidenbaum.Tile;
-      Result := r_WaitCrossHairColor(CROSSHAIR_RED, 1000+Random(100)-Random(100));
-      if Result then
-        AtkFasf := 0;
+    case Players[CurrentPlayer].Strings[7] of
+      'normal':
+      if R_IsUpText('own Tree') then
+      begin
+        Mouse(lx,ly,0,0,True);
+        curtile := Weidenbaum.Tile;
+        Result := r_WaitCrossHairColor(CROSSHAIR_RED, 1000+Random(100)-Random(100));
+        if Result then
+          AtkFasf := 0;
+      end;
+      'oak':
+      if R_IsUpText('own Oak') then
+      begin
+        Mouse(lx,ly,0,0,True);
+        curtile := Weidenbaum.Tile;
+        Result := r_WaitCrossHairColor(CROSSHAIR_RED, 1000+Random(100)-Random(100));
+        if Result then
+          AtkFasf := 0;
+      end;
+      else
+      if R_IsUpText('illow ') then
+      begin
+        Mouse(lx,ly,0,0,True);
+        curtile := Weidenbaum.Tile;
+        Result := r_WaitCrossHairColor(CROSSHAIR_RED, 1000+Random(100)-Random(100));
+        if Result then
+          AtkFasf := 0;
+      end;
     end;
 
     Inc(AtkFasf);
@@ -642,9 +757,16 @@ begin
       AtkFasf := 0;
       Inc(notcooldood);
       MakeCompass('N');
-      if (DistanceFrom(Tile(3059, 3251)) < 50) then
-        if not Moving then
-          r_WebWalkH(Tile(3060, 3253));
+      case Players[CurrentPlayer].Strings[7] of
+        'normal','oak':
+          if (DistanceFrom(Tile(3037, 3270)) < 50) then
+            if not Moving then
+              R_WebWalkH(Tile(3037, 3270));
+        else
+          if (DistanceFrom(Tile(3059, 3251)) < 50) then
+            if not Moving then
+              r_WebWalkH(Tile(3060, 3253));
+      end;
       if notcooldood > 1 then
         if TabExists(Tab_Magic) then
         begin
@@ -688,13 +810,14 @@ begin
         AntiBan_Short;
         BirdieNest;
         curstump := GetObjectAt(curtile,OBJECT_TYPE_INTERACTABLE);
-        if (curstump.ID = 5554) then // Thanks Emaziz!
+        if (curstump.ID = 5554) or (curstump.ID = 1342) or (curstump.ID = 1356) then // Thanks Emaziz!
         begin
-          if DebugMe then WriteLn('Stumped!');
+          WriteLn('Stumped!');
           Break;
         end;
         if not hInvFull then
-          ClickToContinue;
+          if ClickToContinue then
+            CheckPowerLevels;
       until (not rInFight) or (TimeFromMark(KillFailsafe) > 120000) or (hInvFull); // 2 minutes
       if (not loggedIn) or LobbyScreen then Exit;
       if (TimeFromMark(KillFailsafe) > 120000) then
@@ -729,15 +852,15 @@ begin
 
   QC[0] := ['Total runtime:',
     'Players active:',
-    'Total willows cut:',
-    '-> Willows cut per hour:'];
+    'Total logs cut:',
+    '-> Logs cut per hour:'];
   QC[1] := [TimeRunning,
     ToStr(PlayersActive) + ' out of ' + ToStr(HowManyPlayers),
     ToStr(WillowsCutGlobal),
     ToStr((3600 * (WillowsCutGlobal)) div (GetTimeRunning div 1000 + 1))];
 
   WriteLn('<!---');
-  WriteLn('<! ' + Padr('Harry''s ' + SCRIPT_NAME, 33) + 'v' + SCRIPT_VERSION);
+  WriteLn('<! ' + Padr('Harry''s ' + SCRIPT_NAME, 35) + 'v' + SCRIPT_VERSION);
   WriteLn('<!---');
 
   II := High(QC[0]);
@@ -760,8 +883,11 @@ begin
     WriteLn('<! World-hop in: '+ tostr(((Worldleavemarker + PlayerSessionTime) - (GetSystemTime)) div 60000) +' minutes.');
   if DethWelks > 0 then
     WriteLn('<! Death-walked '+toStr(DethWelks)+' times.');
+  if LoggedIn and not LobbyScreen then
+    WriteLn('<! There are '+ToStr(Length(GetAllPlayers))+' fellow botters woodcutting with you!');
   if BirdieGlobal > 0 then
     WriteLn('<! Bird Nests picked up: '+toStr(BirdieGlobal)+'.');
+
 
   if (TimeFromMark(StatsTimer) > 360000) then // 6 minutes.
   begin
@@ -778,9 +904,8 @@ begin
 end;
 
 procedure Player_OnLogIn;
-var TmpLvl: integer;
 begin
-  Wait(100+Random(2000));
+  Wait(1000+Random(2000));
   if (R_FindRandoms) then
     if (not Players[CurrentPlayer].Active) then
     begin
@@ -791,14 +916,7 @@ begin
       Exit;
     end;
 
-  TmpLvl := R_GetSkillLevel(Skill_Woodcutting);
-  if (TmpLvl < 30) and (TmpLvl > 0) then
-  begin
-    WriteLn('You may not use this script without 30+ woodcutting.');
-    Players[CurrentPlayer].Loc := 'TooLowLvl1';
-    NextPlayer(False);
-    Exit;
-  end;
+  CheckPowerLevels;
   MarkTime(PlayerSessionTime);
   WorldLeaveMarker := (2100000 + Random(1500000) - Random(1500000)); // 2100000 ms = 35 minutes. 1500000 ms = 25 minutes. Add and subtract the 25 minutes from 35 giving a huge change of randomness for world-switching.
   //Writeln(tostr(worldleavemarker));
@@ -895,7 +1013,7 @@ begin
 
   repeat
     repeat
-      if(TimeFromMark(ReportTimer) > 60000)then // 1 minute
+      if (TimeFromMark(ReportTimer) > 60000) then // 1 minute
       begin
         PrintReports;
         MarkTime(ReportTimer);
