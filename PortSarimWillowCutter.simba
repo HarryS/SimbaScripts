@@ -1,6 +1,6 @@
 {///////////////////////////////////////////////////////////////////////////////
 //                                                                            //
-//                    Harry's Port Sarim Willow Cutter v0.2                   //
+//                    Harry's Port Sarim Willow Cutter v0.3                   //
 //                                                                            //
 //   Requirements:                                                            //
 //     Level 30+ woodcutting.                                                 //
@@ -30,6 +30,7 @@
 //                              Changelog!                                    //
 //    0.1 - Initial release.                                                  //
 //    0.2 - You may now use axes, both wielded and unwielded.                 //
+//    0.3 - Tree finding should be a lot more accurate now.                   //
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
@@ -62,7 +63,7 @@ begin
     Pass        := 'Password';
     Nick        := 'nickname';
     Booleans[9] := True; // True if your axe is wielded. False if it's in inventory.
-    Member      := True;
+    Member      := False;
     Active      := True;
   end;
 
@@ -101,8 +102,7 @@ const
 ////////////////////////////////////////////////////////////////////////////////
 
   SCRIPT_NAME        = 'Port Sarim Willow Cutter';
-  SCRIPT_VERSION     = '0.2';
-  SECRET_GOOGLE_CODE = 'azsdk28oa'; // Ignore this.
+  SCRIPT_VERSION     = '0.3';
 
 var PlayerSessionTime,ReportTimer,AntiBansGlobal, WillowsCutGlobal, BirdieGlobal,
      WorldLeaveMarker,WorldsHopped, DethWelks, StatsTimer, AtkFasf, notcooldood : integer;
@@ -350,6 +350,8 @@ begin
   Tries := 0;
   if Result then Exit;
 
+  MakeCompass('N');
+
   Tiles := [Point(3047,3239)];
 
   SortTPAFrom(Tiles, GetMyPos);
@@ -495,7 +497,7 @@ begin
   for f := 0 to High(TPA) do
   begin
     TileObject := GetObjectAt(Tile(TPA[f].x, TPA[f].y), objType);
-    if (not (TileObject = NULL_RSOBJECT) and InIntArray(IDs, TileObject.ID)) and TileOnMS(TileObject.Tile, 1300) then
+    if (not (TileObject = NULL_RSOBJECT) and InIntArray(IDs, TileObject.ID)) and TileOnMSEx(TileObject.Realtile,-0.3,0.6,300) then
     begin
       Result := TileObject;
       Exit;
@@ -604,7 +606,7 @@ begin
   for srch := 0 to 3 do // if reflection misclicks tree so it won't wait 2 seconds
   begin
     Weidenbaum := GetObjectByIDH([5551,5552,5553], OBJECT_TYPE_INTERACTABLE, 15);
-    P := TileToMS(Weidenbaum.Tile, 1300);
+    P := TileToMSEx(Weidenbaum.Realtile,-0.3,0.6,300);
     if (toStr(P.X) = '-1') or (toStr(P.Y) = '-1') then
     begin
       if DebugMe then WriteLn('Empty location, tree probably offscreen.');
@@ -614,13 +616,13 @@ begin
           r_WebWalkH(Tile(3059, 3251));
       Exit;
     end;
-    if not TileOnMS(P, 1300) then
+    if not TileOnMS(P, 300) then
       if P = Tile(-1, -1) then
         if not Moving then
           R_WebWalkH(Tile(3059, 3251));
 
-
-    MMouse(P.X, P.Y, 30, 30);
+    if not R_IsUpText('illow ') then
+      MMouse(P.X, P.Y, 27, 27);
     GetMousePos(lx,ly);
     Wait(1+Random(5));
     if R_IsUpText('illow ') then
@@ -639,6 +641,7 @@ begin
       WriteLn('Failed to find tree 30 times... Something might be bad.');
       AtkFasf := 0;
       Inc(notcooldood);
+      MakeCompass('N');
       if (DistanceFrom(Tile(3059, 3251)) < 50) then
         if not Moving then
           r_WebWalkH(Tile(3060, 3253));
@@ -690,6 +693,8 @@ begin
           if DebugMe then WriteLn('Stumped!');
           Break;
         end;
+        if not hInvFull then
+          ClickToContinue;
       until (not rInFight) or (TimeFromMark(KillFailsafe) > 120000) or (hInvFull); // 2 minutes
       if (not loggedIn) or LobbyScreen then Exit;
       if (TimeFromMark(KillFailsafe) > 120000) then
@@ -700,7 +705,7 @@ begin
       else
       begin
         if DebugMe then WriteLn('TREE HAS BEEN CHOPPED');
-        Wait(10+Random(42));
+        Wait(1);
       end;
       if hInvFull then
         BankinDat('YOOOOOOO');
