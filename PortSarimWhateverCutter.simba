@@ -1,10 +1,10 @@
 {///////////////////////////////////////////////////////////////////////////////
 //                                                                            //
-//                   Harry's Port Sarim Whatever Cutter v0.4                  //
+//                   Harry's Port Sarim Whatever Cutter v0.5                  //
 //                                                                            //
 //   Requirements:                                                            //
 //     Level 1+ woodcutting, axe wielded or in first inventory slot.          //
-//     Start near willow trees, at Port Sarim (http://i.imgur.com/EtIOp.png)  //
+//     Start at willow trees, at Port Sarim (http://i.imgur.com/EtIOp.png)    //
 //     It is best to be wielding your axe, but not required. Keep in slot 1.  //
 //     Edit the consts below (DeclarePlayers, basic setup.)                   //
 //     Latest Simba with latest SRL and Reflection.                           //
@@ -34,6 +34,7 @@
 //    0.3 - Tree finding should be a lot more accurate now.                   //
 //    0.4 - Proper checking if you don't have an axe anymore.                 //
 //            Level 1-29 trainer! Any person with an axe will work now!       //
+//    0.5 - Really dumb bug that could cause issues in very rare instances.   //
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
@@ -105,7 +106,7 @@ const
 ////////////////////////////////////////////////////////////////////////////////
 
   SCRIPT_NAME        = 'Port Sarim Whatever Cutter';
-  SCRIPT_VERSION     = '0.4';
+  SCRIPT_VERSION     = '0.5';
 
 var PlayerSessionTime,ReportTimer,AntiBansGlobal, WillowsCutGlobal, BirdieGlobal,
      WorldLeaveMarker,WorldsHopped, DethWelks, StatsTimer, AtkFasf, notcooldood,
@@ -714,7 +715,7 @@ begin
       if not R_IsUpText('own Oak') then
         MMouse(P.X, P.Y, 17, 17);
       else
-      if not R_IsUpText('illow ') then
+      if not R_IsUpText('own Willow') then
         MMouse(P.X, P.Y, 27, 27);
     end;
     GetMousePos(lx,ly);
@@ -739,7 +740,7 @@ begin
           AtkFasf := 0;
       end;
       else
-      if R_IsUpText('illow ') then
+      if R_IsUpText('own Willow') then
       begin
         Mouse(lx,ly,0,0,True);
         curtile := Weidenbaum.Tile;
