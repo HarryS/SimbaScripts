@@ -1,10 +1,10 @@
 {///////////////////////////////////////////////////////////////////////////////
 //                                                                            //
-//                   Harry's Port Sarim Whatever Cutter v0.5                  //
+//                   Harry's Port Sarim Whatever Cutter v0.6                  //
 //                                                                            //
 //   Requirements:                                                            //
 //     Level 1+ woodcutting, axe wielded or in first inventory slot.          //
-//     Start at willow trees, at Port Sarim (http://i.imgur.com/EtIOp.png)    //
+//     Start near willow trees, at Port Sarim (http://i.imgur.com/EtIOp.png)  //
 //     It is best to be wielding your axe, but not required. Keep in slot 1.  //
 //     Edit the consts below (DeclarePlayers, basic setup.)                   //
 //     Latest Simba with latest SRL and Reflection.                           //
@@ -35,6 +35,7 @@
 //    0.4 - Proper checking if you don't have an axe anymore.                 //
 //            Level 1-29 trainer! Any person with an axe will work now!       //
 //    0.5 - Really dumb bug that could cause issues in very rare instances.   //
+//    0.6 - Fixed for the horrible and ugly RuneScape graphics update.        //
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
@@ -106,7 +107,7 @@ const
 ////////////////////////////////////////////////////////////////////////////////
 
   SCRIPT_NAME        = 'Port Sarim Whatever Cutter';
-  SCRIPT_VERSION     = '0.5';
+  SCRIPT_VERSION     = '0.6';
 
 var PlayerSessionTime,ReportTimer,AntiBansGlobal, WillowsCutGlobal, BirdieGlobal,
      WorldLeaveMarker,WorldsHopped, DethWelks, StatsTimer, AtkFasf, notcooldood,
@@ -159,7 +160,7 @@ begin
     if Result then
     begin
       WriteLn('You probably ran away from Port Sarim - let''s walk back to it.');
-      wTile := TileToMM(Tile(3059, 3251));
+      wTile := TileToMM(Tile(3060, 3254));
       if not rs_OnMiniMap(wTile.X, wTile.Y) then
       begin
         WriteLn('Tile doesn''t exist, o noes! Might you be in lubmy?');
@@ -183,12 +184,12 @@ begin
           r_FFlag(0);
           case Players[CurrentPlayer].Strings[7] of
             'normal','oak': R_WebWalkH(Tile(3037, 3270));
-            else R_WebWalkH(Tile(3059, 3251)); // willow trees!
+            else R_WebWalkH(Tile(3060, 3254)); // willow trees!
           end;
           r_FFlag(0);
           SetAngle(True);
           WriteLn('How does I reflection deathwalk? :D');
-          if (DistanceFrom(Tile(3059, 3251)) < 35) then
+          if (DistanceFrom(Tile(3060, 3254)) < 35) then
             Result := False
           else
             Result := True;
@@ -224,7 +225,7 @@ begin
             r_FFlag(0);
             case Players[CurrentPlayer].Strings[7] of
               'normal','oak': R_WebWalkH(Tile(3037, 3270));
-              else R_WebWalkH(Tile(3059, 3251)); // willow trees!
+              else R_WebWalkH(Tile(3060, 3254)); // willow trees!
             end;
             r_FFlag(0);
             WriteLn('How does I reflection deathwalk?');
@@ -242,7 +243,7 @@ begin
           Inc(LagTries);
           Mouse(wTile.x, wTile.y, 1, 1, true);
           Wait(RandomRange(3000, 5000));
-        until (LagTries > 3) or (DistanceFrom(Tile(3059, 3251)) < 7);
+        until (LagTries > 3) or (DistanceFrom(Tile(3060, 3254)) < 7);
         if LagTries > 3 then
         begin
           WriteLn('Could not get back to the willows, we failed.');
@@ -374,7 +375,7 @@ begin
       WriteLn('Could not find Bank Booth.');
       Exit;
     end;
-    WalkToTile(Tiles[0], 0, 9);
+    WalkToTile(Tiles[0], 0, 5);
     Wait(1+Random(42));
   end;
   if not(TileOnMS(Tiles[0], 600)) then
@@ -393,28 +394,31 @@ begin
   R_FindRandoms;
 
   P := TileToMS(Tiles[0], 10);
-  MMouse(p.x - 7, p.y - 7, 16, 16);
+  MMouse(p.x - 7, p.y + 3, 16, 16);
   GetMousePos(bx,by);
   Wait(1+Random(12));
   if r_isUpText('eposit ') then
   begin
     Mouse(bx,by,0,0,True);
+    result := r_WaitCrossHairColor(CROSSHAIR_RED, 500+Random(100)-Random(100));
+    if Result then
     repeat
+      Result := False;
       MarkTime(impatient);
       while not R_DepositBoxScreen do
       begin
         Wait(10+Random(42));
-        if TimeFromMark(impatient) > 9001 then
+        if TimeFromMark(impatient) > 5001 then
         begin
           writeln('Too long waiting...');
-          Break;
+          Exit;
         end;
       end;
       Inc(Tries);
       Result := R_DepositBoxScreen;
     until Result or (Tries > 1);
   end;
-  writeln('Yay, opened deposit box.');
+  writeln('Yay, probably opened deposit box.');
 end;
 
 function BankinDat(whereto: string): boolean;
@@ -426,7 +430,7 @@ begin
     WriteLn('Emptied inv, get to the trees!');
     case Players[CurrentPlayer].Strings[7] of
       'normal','oak': R_WebWalkH(Tile(3037, 3270));
-      else R_WebWalkH(Tile(3059, 3251));
+      else R_WebWalkH(Tile(3060, 3254));
     end;
     //r_FFlag(8);
     Exit;
@@ -529,7 +533,7 @@ begin
   for f := 0 to High(TPA) do
   begin
     TileObject := GetObjectAt(Tile(TPA[f].x, TPA[f].y), objType);
-    if (not (TileObject = NULL_RSOBJECT) and InIntArray(IDs, TileObject.ID)) and TileOnMSEx(TileObject.Realtile,-0.3,0.6,300) then
+    if (not (TileObject = NULL_RSOBJECT) and InIntArray(IDs, TileObject.ID)) and TileOnMSEx(TileObject.Realtile,0.5,0.5,300) then
     begin
       Result := TileObject;
       Exit;
@@ -677,46 +681,57 @@ begin
 
   for srch := 0 to 3 do // if reflection misclicks tree so it won't wait 2 seconds
   begin
+    //case Players[CurrentPlayer].Strings[7] of
+    //  'normal': Weidenbaum := GetObjectByIDH([1276,1277,1278,1280], OBJECT_TYPE_INTERACTABLE, 15);
+    //  'oak': Weidenbaum := GetObjectByIDH([1281], OBJECT_TYPE_INTERACTABLE, 15);
+    //  else Weidenbaum := GetObjectByIDH([5551,5552,5553], OBJECT_TYPE_INTERACTABLE, 15); // Willow
+    //end;
     case Players[CurrentPlayer].Strings[7] of
-      'normal': Weidenbaum := GetObjectByIDH([1276,1277,1278,1280], OBJECT_TYPE_INTERACTABLE, 15);
-      'oak': Weidenbaum := GetObjectByIDH([1281], OBJECT_TYPE_INTERACTABLE, 15);
-      else Weidenbaum := GetObjectByIDH([5551,5552,5553], OBJECT_TYPE_INTERACTABLE, 15); // Willow
+      'normal': Weidenbaum := GetObjectByIDH([38782,38783,38785,38786,38787], OBJECT_TYPE_INTERACTABLE, 15);
+      'oak': Weidenbaum := GetObjectByIDH([38731,38732], OBJECT_TYPE_INTERACTABLE, 15);
+      else Weidenbaum := GetObjectByIDH([38616,38627], OBJECT_TYPE_INTERACTABLE, 15); // Willow
     end;
-    P := TileToMSEx(Weidenbaum.Realtile,-0.3,0.6,300);
+    //P := TileToMSEx(Weidenbaum.Realtile,-0.3,0.6,300);
+    P := TileToMSEx(Weidenbaum.Realtile,0.5,0.5,300);
     if (toStr(P.X) = '-1') or (toStr(P.Y) = '-1') then
     begin
       if DebugMe then WriteLn('Empty location, tree probably offscreen.');
       Wait(10+Random(50));
       case Players[CurrentPlayer].Strings[7] of
         'normal','oak':
-        if (DistanceFrom(Tile(3037, 3270)) > 2) then
+        if (DistanceFrom(Weidenbaum.Tile) < 25) then
           if not Moving then
-            R_WebWalkH(Tile(RandomRange(3033,3040), RandomRange(3267,3273)));
+          begin
+            WalkToTile(Weidenbaum.Tile,3,3);
+            Exit;
+          end;
         else
-          if (DistanceFrom(Tile(3059, 3251)) > 2) then
+          if (DistanceFrom(Weidenbaum.Tile) < 25) then
             if not Moving then
-              r_WebWalkH(Tile(3059, 3251));
+            begin
+              WalkToTile(Weidenbaum.Tile,3,3);
+              Exit;
+            end;
       end;
-      Exit;
     end;
     if not TileOnMS(P, 300) then
       if P = Tile(-1, -1) then
         if not Moving then
           case Players[CurrentPlayer].Strings[7] of
             'normal','oak': R_WebWalkH(Tile(3037, 3270));
-            else R_WebWalkH(Tile(3059, 3251));
+            else R_WebWalkH(Tile(3061, 3254));
           end;
 
     case Players[CurrentPlayer].Strings[7] of
       'normal':
       if not R_IsUpText('own Tree') then
-        MMouse(P.X, P.Y, 17, 17);
+        MMouse(P.X-2, P.Y, 10, 17);
       'oak':
       if not R_IsUpText('own Oak') then
-        MMouse(P.X, P.Y, 17, 17);
+        MMouse(P.X-2, P.Y, 10, 17);
       else
       if not R_IsUpText('own Willow') then
-        MMouse(P.X, P.Y, 27, 27);
+        MMouse(P.X-4, P.Y, 10, 17);
     end;
     GetMousePos(lx,ly);
     Wait(1+Random(5));
@@ -758,15 +773,22 @@ begin
       AtkFasf := 0;
       Inc(notcooldood);
       MakeCompass('N');
+      SetAngle(True);
       case Players[CurrentPlayer].Strings[7] of
         'normal','oak':
-          if (DistanceFrom(Tile(3037, 3270)) < 50) then
+          if (DistanceFrom(Weidenbaum.Tile) < 25) then
             if not Moving then
-              R_WebWalkH(Tile(3037, 3270));
+            begin
+              WalkToTile(Weidenbaum.Tile,3,3);
+              Exit;
+            end;
         else
-          if (DistanceFrom(Tile(3059, 3251)) < 50) then
+          if (DistanceFrom(Weidenbaum.Tile) < 25) then
             if not Moving then
-              r_WebWalkH(Tile(3060, 3253));
+            begin
+              WalkToTile(Weidenbaum.Tile,3,3);
+              Exit;
+            end;
       end;
       if notcooldood > 1 then
         if TabExists(Tab_Magic) then
@@ -811,10 +833,13 @@ begin
         AntiBan_Short;
         BirdieNest;
         curstump := GetObjectAt(curtile,OBJECT_TYPE_INTERACTABLE);
-        if (curstump.ID = 5554) or (curstump.ID = 1342) or (curstump.ID = 1356) then // Thanks Emaziz!
-        begin
-          WriteLn('Stumped!');
-          Break;
+        //if (curstump.ID = 5554) or (curstump.ID = 1342) or (curstump.ID = 1356) then // Thanks Emaziz!
+        case curstump.ID of // Willow, Oak, Normal
+          38725, 38754,38741, 40351,40352,40354,40355,40356:
+          begin
+            if DebugMe then WriteLn('Stumped!');
+            Break;
+          end;
         end;
         if not hInvFull then
           if ClickToContinue then
