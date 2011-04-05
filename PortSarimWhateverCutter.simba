@@ -1,6 +1,6 @@
 {///////////////////////////////////////////////////////////////////////////////
 //                                                                            //
-//                   Harry's Port Sarim Whatever Cutter v0.6                  //
+//                   Harry's Port Sarim Whatever Cutter v0.7                  //
 //                                                                            //
 //   Requirements:                                                            //
 //     Level 1+ woodcutting, axe wielded or in first inventory slot.          //
@@ -14,6 +14,7 @@
 //             and banks them at the deposit box a few clicks to the south.   //
 //     Picks up birds-nests if you are a RS Member.                           //
 //     In the rare chance you die, will death-walk back to Port Sarim.        //
+//       You will probably die more often if you are a lvl-3, so go level cb! //
 //     Script is designed to "never stop", should run until a random breaks.  //
 //     QUALITY SCRIPT                                                         //
 //     Auto-updating!                                                         //
@@ -36,6 +37,7 @@
 //            Level 1-29 trainer! Any person with an axe will work now!       //
 //    0.5 - Really dumb bug that could cause issues in very rare instances.   //
 //    0.6 - Fixed for the horrible and ugly RuneScape graphics update.        //
+//    0.7 - Yew support - make const DoYews=True to activate.                 //
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
@@ -80,6 +82,8 @@ const
   MEMBERS = False; // Set to True if using a RS-Members account. False if F2P.
   WORLD_SWITCH = True; // Switch world when connecting to RS?
   WORLD_LEAVE = True; // Hop words every ~25 minutes or so. WORLD_SWITCH must be true.
+  DoYews  = False; // Chop Yews? (Not suggested due to them being such slow exp)
+  YewAt   = 60;  // What level to begin Yew cutting at. DoYews must be true for this to activate.
 
   Autochecken = True; // Automatically check for updates and download the newer version of the script if it gets updated.
 
@@ -107,11 +111,11 @@ const
 ////////////////////////////////////////////////////////////////////////////////
 
   SCRIPT_NAME        = 'Port Sarim Whatever Cutter';
-  SCRIPT_VERSION     = '0.6';
+  SCRIPT_VERSION     = '0.7';
 
 var PlayerSessionTime,ReportTimer,AntiBansGlobal, WillowsCutGlobal, BirdieGlobal,
      WorldLeaveMarker,WorldsHopped, DethWelks, StatsTimer, AtkFasf, notcooldood,
-     PowerTmp : integer;
+     PowerTmp, ProperLog : integer;
 
 Function r_WebWalkH(T: TTile): Boolean; // JuKKa
 Var
@@ -122,7 +126,7 @@ Begin
   P := TileToPoint(T);
   if DistanceFrom(P) < 2 then
   begin
-    WriteLn('Located close enough to tile, unable to webwalk!');
+    if DebugMe then WriteLn('Located close enough to tile, unable to webwalk!');
     Exit;
   end;
   Repeat
@@ -139,6 +143,11 @@ Begin
     R_FindRandoms;
   Until( Result );
 End;
+
+function r_TileOnMSH(moix,moiy: integer) : Boolean; // Drags111
+begin
+  Result := PointInBox(Point(moix,moiy), IntToBox(MSX1, MSY1, MSX2, MSY2));
+end;
 
 function NotSafeZone: boolean;
 var wTile: TPoint; LagTries,ee: integer;
@@ -184,7 +193,8 @@ begin
           r_FFlag(0);
           case Players[CurrentPlayer].Strings[7] of
             'normal','oak': R_WebWalkH(Tile(3037, 3270));
-            else R_WebWalkH(Tile(3060, 3254)); // willow trees!
+            'willow': R_WebWalkH(Tile(3060, 3254));
+            'yew': R_WebWalkH(Tile(3048, 3270));
           end;
           r_FFlag(0);
           SetAngle(True);
@@ -225,7 +235,8 @@ begin
             r_FFlag(0);
             case Players[CurrentPlayer].Strings[7] of
               'normal','oak': R_WebWalkH(Tile(3037, 3270));
-              else R_WebWalkH(Tile(3060, 3254)); // willow trees!
+              'willow': R_WebWalkH(Tile(3060, 3254));
+              'yew': R_WebWalkH(Tile(3048, 3270));
             end;
             r_FFlag(0);
             WriteLn('How does I reflection deathwalk?');
@@ -246,13 +257,13 @@ begin
         until (LagTries > 3) or (DistanceFrom(Tile(3060, 3254)) < 7);
         if LagTries > 3 then
         begin
-          WriteLn('Could not get back to the willows, we failed.');
+          WriteLn('Could not get back to the trees, we failed.');
           Result := True;
           Exit;
         end
         else
         begin
-          WriteLn('We got back to the willows, hell yeah!');
+          WriteLn('We got back to the trees, hell yeah!');
           Result := False;
           Exit;
         end;
@@ -430,7 +441,8 @@ begin
     WriteLn('Emptied inv, get to the trees!');
     case Players[CurrentPlayer].Strings[7] of
       'normal','oak': R_WebWalkH(Tile(3037, 3270));
-      else R_WebWalkH(Tile(3060, 3254));
+      'willow': R_WebWalkH(Tile(3060, 3254));
+      'yew': R_WebWalkH(Tile(3048, 3270));
     end;
     //r_FFlag(8);
     Exit;
@@ -485,11 +497,17 @@ begin
         IncEx(Players[CurrentPlayer].Integers[68],1050);
         stats_IncVariable('Total EXP Gained', 1050); // 37.5 exp per oak
       end;
-      else
+      'willow':
       begin
         stats_IncVariable('Willow Logs Chopped',28);
         IncEx(Players[CurrentPlayer].Integers[68],1890);
         stats_IncVariable('Total EXP Gained', 1890); // 67.5 exp per willow
+      end;
+      'yew':
+      begin
+        stats_IncVariable('Yew Logs Chopped',28);
+        IncEx(Players[CurrentPlayer].Integers[68],4900);
+        stats_IncVariable('Total EXP Gained', 4900); // 175 exp per yew
       end;
     end;
     Wait(10+Random(500));
@@ -581,16 +599,21 @@ begin
 end;
 
 procedure CheckPowerLevels;
-var TmpLvl: integer;
 begin
   if not LoggedIn or LobbyScreen then
     Exit;
-  TmpLvl := R_GetSkillLevel(Skill_Woodcutting);
+  Players[CurrentPlayer].Integers[42] := R_GetSkillLevel(Skill_Woodcutting);
   Inc(PowerTmp);
-  case TmpLvl of
+  case Players[CurrentPlayer].Integers[42] of
     1..15: Players[CurrentPlayer].Strings[7] := 'normal';
     15..29: Players[CurrentPlayer].Strings[7] := 'oak';
-    30..99: Players[CurrentPlayer].Strings[7] := 'willow';
+    30..99:
+    begin
+      Players[CurrentPlayer].Strings[7] := 'willow';
+      if YewAt <= Players[CurrentPlayer].Integers[42] then
+        if DoYews then
+          Players[CurrentPlayer].Strings[7] := 'yew';
+    end
     else
     begin
       WriteLn('Failed to get current skill level...');
@@ -609,7 +632,7 @@ begin
       end;
     end;
   end;
-  PowerTmp := 0; // If it didn't fail.
+  PowerTmp := 0;
 end;
 
 function FindVictim: Boolean;
@@ -689,38 +712,49 @@ begin
     case Players[CurrentPlayer].Strings[7] of
       'normal': Weidenbaum := GetObjectByIDH([38782,38783,38785,38786,38787], OBJECT_TYPE_INTERACTABLE, 15);
       'oak': Weidenbaum := GetObjectByIDH([38731,38732], OBJECT_TYPE_INTERACTABLE, 15);
-      else Weidenbaum := GetObjectByIDH([38616,38627], OBJECT_TYPE_INTERACTABLE, 15); // Willow
+      'willow': Weidenbaum := GetObjectByIDH([38616,38627], OBJECT_TYPE_INTERACTABLE, 15);
+      'yew': Weidenbaum := GetObjectByIDH([38755], OBJECT_TYPE_INTERACTABLE, 40);
     end;
     //P := TileToMSEx(Weidenbaum.Realtile,-0.3,0.6,300);
     P := TileToMSEx(Weidenbaum.Realtile,0.5,0.5,300);
-    if (toStr(P.X) = '-1') or (toStr(P.Y) = '-1') then
+    if not r_TileOnMSH(P.X,P.Y) then
     begin
-      if DebugMe then WriteLn('Empty location, tree probably offscreen.');
+      if DebugMe then WriteLn('Tree probably offscreen.');
       Wait(10+Random(50));
+      if (DistanceFrom(Weidenbaum.Tile) < 25) then
+        if not Moving then
+        begin
+          r_WebWalkH(Weidenbaum.Tile);
+          Exit;
+        end;
       case Players[CurrentPlayer].Strings[7] of
         'normal','oak':
-        if (DistanceFrom(Weidenbaum.Tile) < 25) then
-          if not Moving then
-          begin
-            WalkToTile(Weidenbaum.Tile,3,3);
-            Exit;
-          end;
-        else
-          if (DistanceFrom(Weidenbaum.Tile) < 25) then
-            if not Moving then
-            begin
-              WalkToTile(Weidenbaum.Tile,3,3);
-              Exit;
-            end;
+        begin
+          R_WebWalkH(Tile(3037, 3270));
+          FFlag(1);
+        end;
+        'willow':
+        begin
+          R_WebWalkH(Tile(3060, 3254));
+          FFlag(1);
+        end;
+        'yew':
+        begin
+          R_WebWalkH(Tile(3048,3270)); // nice place to see both trees at once.
+          FFlag(1);
+        end;
       end;
+      if TimeFromMark(ProperLog) > 900000 then // 15 minutes without a proper tree
+      begin
+        WriteLn('15 minutes not finding a log - something is BAD!');
+        Players[CurrentPlayer].Loc := '15MinutesNoTree';
+        CloseBank;
+        Logout;
+        NextPlayer(False);
+        Exit;
+      end;
+      Exit;
     end;
-    if not TileOnMS(P, 300) then
-      if P = Tile(-1, -1) then
-        if not Moving then
-          case Players[CurrentPlayer].Strings[7] of
-            'normal','oak': R_WebWalkH(Tile(3037, 3270));
-            else R_WebWalkH(Tile(3061, 3254));
-          end;
 
     case Players[CurrentPlayer].Strings[7] of
       'normal':
@@ -729,8 +763,11 @@ begin
       'oak':
       if not R_IsUpText('own Oak') then
         MMouse(P.X-2, P.Y, 10, 17);
-      else
+      'willow':
       if not R_IsUpText('own Willow') then
+        MMouse(P.X-4, P.Y, 10, 17);
+      'yew':
+      if not R_IsUpText('own Yew') then
         MMouse(P.X-4, P.Y, 10, 17);
     end;
     GetMousePos(lx,ly);
@@ -741,7 +778,7 @@ begin
       begin
         Mouse(lx,ly,0,0,True);
         curtile := Weidenbaum.Tile;
-        Result := r_WaitCrossHairColor(CROSSHAIR_RED, 1000+Random(100)-Random(100));
+        Result := r_WaitCrossHairColor(CROSSHAIR_RED, 500+Random(100)-Random(100));
         if Result then
           AtkFasf := 0;
       end;
@@ -750,16 +787,25 @@ begin
       begin
         Mouse(lx,ly,0,0,True);
         curtile := Weidenbaum.Tile;
-        Result := r_WaitCrossHairColor(CROSSHAIR_RED, 1000+Random(100)-Random(100));
+        Result := r_WaitCrossHairColor(CROSSHAIR_RED, 500+Random(100)-Random(100));
         if Result then
           AtkFasf := 0;
       end;
-      else
+      'willow':
       if R_IsUpText('own Willow') then
       begin
         Mouse(lx,ly,0,0,True);
         curtile := Weidenbaum.Tile;
-        Result := r_WaitCrossHairColor(CROSSHAIR_RED, 1000+Random(100)-Random(100));
+        Result := r_WaitCrossHairColor(CROSSHAIR_RED, 500+Random(100)-Random(100));
+        if Result then
+          AtkFasf := 0;
+      end;
+      'yew':
+      if R_IsUpText('own Yew') then
+      begin
+        Mouse(lx,ly,0,0,True);
+        curtile := Weidenbaum.Tile;
+        Result := r_WaitCrossHairColor(CROSSHAIR_RED, 500+Random(100)-Random(100));
         if Result then
           AtkFasf := 0;
       end;
@@ -774,22 +820,13 @@ begin
       Inc(notcooldood);
       MakeCompass('N');
       SetAngle(True);
-      case Players[CurrentPlayer].Strings[7] of
-        'normal','oak':
-          if (DistanceFrom(Weidenbaum.Tile) < 25) then
-            if not Moving then
-            begin
-              WalkToTile(Weidenbaum.Tile,3,3);
-              Exit;
-            end;
-        else
-          if (DistanceFrom(Weidenbaum.Tile) < 25) then
-            if not Moving then
-            begin
-              WalkToTile(Weidenbaum.Tile,3,3);
-              Exit;
-            end;
-      end;
+      if (DistanceFrom(Weidenbaum.Tile) < 25) then
+        if not Moving then
+        begin
+          r_WebWalkH(Weidenbaum.Tile);
+          FFlag(3);
+          Exit;
+        end;
       if notcooldood > 1 then
         if TabExists(Tab_Magic) then
         begin
@@ -823,6 +860,7 @@ begin
     begin
       AtkFasf := 0;
       notcooldood := 0;
+      MarkTime(ProperLog);
       if (R_FlagExists) then
         R_Flag;
       MarkTime(KillFailsafe);
@@ -834,8 +872,11 @@ begin
         BirdieNest;
         curstump := GetObjectAt(curtile,OBJECT_TYPE_INTERACTABLE);
         //if (curstump.ID = 5554) or (curstump.ID = 1342) or (curstump.ID = 1356) then // Thanks Emaziz!
-        case curstump.ID of // Willow, Oak, Normal
-          38725, 38754,38741, 40351,40352,40354,40355,40356:
+        case curstump.ID of // Yew, Willow, Oak, Normal
+          38759, // Yew
+          38725, // Willow
+          38754,38741, // Oak
+          40351,40352,40354,40355,40356: // Normal
           begin
             if DebugMe then WriteLn('Stumped!');
             Break;
@@ -894,12 +935,13 @@ begin
     WriteLn('<! ' + Padr(QC[0][I], 32) + QC[1][I]);
 
   WriteLn('<!---');
-  WriteLn('<! ## | Nick | A | LogsCut/Hr: | ExpGain/Hr: | Rand:')
+  WriteLn('<! ## | Nick | A | Lvl | LogsCut/Hr: | ExpGain/Hr: | Rand:')
 
   for I := 0 to HowManyPlayers - 1 do
     WriteLn('<! ' + Padr(ToStr(I),                                 3) +
       '| ' + Padr(Copy(Players[I].Nick, 1, 4),                     5) +
       '| ' + Padr(ToStr(Players[I].Active)[1],                     2) +
+      '| ' + Padr(ToStr(Players[I].Integers[42]), 4) +
       '| ' + Padr(ToStr(Players[I].Integers[69])+'/'+ToStr((3600 * (Players[I].Integers[69])) div (GetTimeRunning div 1000 + 1)),12) +
       '| ' + Padr(toStr(Players[CurrentPlayer].Integers[68])+'/'+ToStr((3600 * (Players[I].Integers[68])) div (GetTimeRunning div 1000 + 1)),12) +
       '| ' + Players[I].Rand);
@@ -1030,6 +1072,7 @@ begin
   end;
 
   ActivateClient;
+  MarkTime(ProperLog);
   Wait(1000 + Random(2000));
 end;
 
