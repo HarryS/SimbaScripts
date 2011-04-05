@@ -1,6 +1,6 @@
 {///////////////////////////////////////////////////////////////////////////////
 //                                                                            //
-//                   Harry's Port Sarim Whatever Cutter v0.7                  //
+//                   Harry's Port Sarim Whatever Cutter v0.8                  //
 //                                                                            //
 //   Requirements:                                                            //
 //     Level 1+ woodcutting, axe wielded or in first inventory slot.          //
@@ -38,6 +38,7 @@
 //    0.5 - Really dumb bug that could cause issues in very rare instances.   //
 //    0.6 - Fixed for the horrible and ugly RuneScape graphics update.        //
 //    0.7 - Yew support - make const DoYews=True to activate.                 //
+//    0.8 - Drastically improved Yew switching speed.                         //
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
@@ -90,6 +91,7 @@ const
   SRLStats_Username = ''; // Your SRL Stats Username (not RS!)
   SRLStats_Password = ''; // Your SRL Stats Password (not RS!)
 
+
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
 //   End of Basic Setup - you may continue down more IF you know what you're  //
@@ -111,7 +113,7 @@ const
 ////////////////////////////////////////////////////////////////////////////////
 
   SCRIPT_NAME        = 'Port Sarim Whatever Cutter';
-  SCRIPT_VERSION     = '0.7';
+  SCRIPT_VERSION     = '0.8';
 
 var PlayerSessionTime,ReportTimer,AntiBansGlobal, WillowsCutGlobal, BirdieGlobal,
      WorldLeaveMarker,WorldsHopped, DethWelks, StatsTimer, AtkFasf, notcooldood,
@@ -635,11 +637,40 @@ begin
   PowerTmp := 0;
 end;
 
+procedure YewRelocate;
+var J: TPoint; tx,ty: integer;
+begin
+  if Players[CurrentPlayer].Strings[7] <> 'yew' then
+    Exit;
+  if (DistanceFrom(Tile(3048,3270)) < 1) then
+    Exit;
+  if Moving then
+    Exit;
+  J := TileToMS(Tile(3048,3270), 300);
+  if r_TileOnMSH(J.X,J.Y) then
+  begin
+    MMouse(J.X-Random(20)+Random(20),J.Y-Random(20)+Random(20),0,0);
+    Wait(10+Random(200));
+    if r_IsUpText('alk here') then
+    begin
+      GetMousePos(tx,ty);
+      Mouse(tx,ty,0,0,True);
+    end else
+    begin
+      GetMousePos(tx,ty);
+      Mouse(tx,ty,0,0,False);
+      Wait(10+Random(200));
+      r_ChooseOption('alk here');
+    end;
+    end else
+      R_WebWalkH(Tile(3048,3270)); // nice place to see both trees at once.
+end;
+
 function FindVictim: Boolean;
 var
   Weidenbaum,curstump: TRSObject;
   P, curtile: TPoint;
-  srch,KillFailsafe,lx,ly,PreWalk: integer;
+  srch,KillFailsafe,lx,ly,PreWalk,SoRandum: integer;
 begin
   Result := False;
   if not LoggedIn or LobbyScreen then
@@ -648,7 +679,7 @@ begin
   if hInvFull then
     BankinDat('okaydude');
 
-  Wait(50+Random(100));
+  Wait(10+Random(100));
   R_FindRandoms;
   AntiBan_Short;
   if ClickToContinue then
@@ -721,7 +752,7 @@ begin
     begin
       if DebugMe then WriteLn('Tree probably offscreen.');
       Wait(10+Random(50));
-      if (DistanceFrom(Weidenbaum.Tile) < 25) then
+      if (DistanceFrom(Weidenbaum.Tile) < 40) then
         if not Moving then
         begin
           r_WebWalkH(Weidenbaum.Tile);
@@ -732,16 +763,18 @@ begin
         begin
           R_WebWalkH(Tile(3037, 3270));
           FFlag(1);
+          Exit;
         end;
         'willow':
         begin
           R_WebWalkH(Tile(3060, 3254));
           FFlag(1);
+          Exit;
         end;
         'yew':
         begin
-          R_WebWalkH(Tile(3048,3270)); // nice place to see both trees at once.
-          FFlag(1);
+          YewRelocate;
+          Exit;
         end;
       end;
       if TimeFromMark(ProperLog) > 900000 then // 15 minutes without a proper tree
@@ -778,7 +811,7 @@ begin
       begin
         Mouse(lx,ly,0,0,True);
         curtile := Weidenbaum.Tile;
-        Result := r_WaitCrossHairColor(CROSSHAIR_RED, 500+Random(100)-Random(100));
+        Result := r_WaitCrossHairColor(CROSSHAIR_RED, 1000+Random(100)-Random(100));
         if Result then
           AtkFasf := 0;
       end;
@@ -787,7 +820,7 @@ begin
       begin
         Mouse(lx,ly,0,0,True);
         curtile := Weidenbaum.Tile;
-        Result := r_WaitCrossHairColor(CROSSHAIR_RED, 500+Random(100)-Random(100));
+        Result := r_WaitCrossHairColor(CROSSHAIR_RED, 1000+Random(100)-Random(100));
         if Result then
           AtkFasf := 0;
       end;
@@ -796,7 +829,7 @@ begin
       begin
         Mouse(lx,ly,0,0,True);
         curtile := Weidenbaum.Tile;
-        Result := r_WaitCrossHairColor(CROSSHAIR_RED, 500+Random(100)-Random(100));
+        Result := r_WaitCrossHairColor(CROSSHAIR_RED, 1000+Random(100)-Random(100));
         if Result then
           AtkFasf := 0;
       end;
@@ -805,7 +838,7 @@ begin
       begin
         Mouse(lx,ly,0,0,True);
         curtile := Weidenbaum.Tile;
-        Result := r_WaitCrossHairColor(CROSSHAIR_RED, 500+Random(100)-Random(100));
+        Result := r_WaitCrossHairColor(CROSSHAIR_RED, 1000+Random(100)-Random(100));
         if Result then
           AtkFasf := 0;
       end;
@@ -864,6 +897,7 @@ begin
       if (R_FlagExists) then
         R_Flag;
       MarkTime(KillFailsafe);
+      SoRandum := 300000 + Random(280000) - Random(280000);
       repeat
         if DebugMe then writeLn('we choppin');
         Wait(10+Random(100));
@@ -879,17 +913,19 @@ begin
           40351,40352,40354,40355,40356: // Normal
           begin
             if DebugMe then WriteLn('Stumped!');
+            if not hInvFull then
+              YewRelocate;
             Break;
           end;
         end;
         if not hInvFull then
           if ClickToContinue then
             CheckPowerLevels;
-      until (not rInFight) or (TimeFromMark(KillFailsafe) > 120000) or (hInvFull); // 2 minutes
+      until (not rInFight) or (TimeFromMark(KillFailsafe) > SoRandum) or (hInvFull); // 2 minutes
       if (not loggedIn) or LobbyScreen then Exit;
-      if (TimeFromMark(KillFailsafe) > 120000) then
+      if (TimeFromMark(KillFailsafe) > SoRandum) then
       begin
-        writeLn('Took too long to cut tree, breaking out!')
+        writeLn('Took too long to cut tree, breaking out! ('+ToStr(SoRandum)+' ms)');
         wait(3000+Random(10000));
       end
       else
