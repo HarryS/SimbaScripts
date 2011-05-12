@@ -1,0 +1,445 @@
+{///////////////////////////////////////////////////////////////////////////////
+//                                                                            //
+//                           Harry's BotBuster v0.1                           //
+//                                                                            //
+//   Requirements:                                                            //
+//     An account sitting at a location with a lot of low-combat-level bots.  //
+//       Use an account you do not care about, as you may get bant ...        //
+//     Edit the consts below (DeclarePlayers, basic setup.)                   //
+//     Latest Simba with latest SRL and Reflection.                           //
+//                                                                            //
+//   Features:                                                                //
+//     Reports all players under a specific combat level who fail to reply.   //
+//     Script is designed to "never stop", should run until a random breaks.  //
+//     QUALITY SCRIPT                                                         //
+//     Auto-updating!                                                         //
+//     Anti-ban modules.                                                      //
+//     World-switches every ~25 minutes.                                      //
+//     Simple to setup and use!                                               //
+//     And much more!                                                         //
+//                                                                            //
+////////////////////////////////////////////////////////////////////////////////
+//                                                                            //
+//                              Changelog!                                    //
+//    0.1 - Initial release.                                                  //
+//                                                                            //
+////////////////////////////////////////////////////////////////////////////////
+//                                                                            //
+//   Script License: WTFPL - Do What The Fuck You Want To Public License.     //
+//                                                                            //
+//      This program is free software. It comes without any warranty, to the  //
+//      extent permitted by applicable law. You can redistribute it and/or    //
+//      modify it under the terms of the Do What The Fuck You Want To Public  //
+//      License, Version 2, as published by Sam Hocevar. See                  //
+//      http://sam.zoy.org/wtfpl/COPYING for more details.                    //
+//                                                                            //
+///////////////////////////////////////////////////////////////////////////////}
+
+program HarrysBotBuster;
+{$DEFINE SMART}
+{$i SRL/SRL.scar}
+{$i Reflection/Reflection.simba}
+{$i SRL/SRL/Misc/Stats.simba}
+
+procedure DeclarePlayers;
+begin
+  HowManyPlayers := 1;
+  CurrentPlayer := 0;
+  NumberOfPlayers(HowManyPlayers);
+
+  with Players[0] do
+  begin
+    Name        := 'User;
+    Pass        := 'Pass';
+    Nick        := 'Fullname'; // IMPORTANT: Put your FULL and proper ingame name here.
+    Member      := False;
+    Active      := True;
+  end;
+
+end;
+
+const
+  SERVER  = 61;     // Enter "0" to pick a random server.
+  SIGNED  = True;  // Use the signed RS-client? Leave at True unless you know what you're doing.
+  MEMBERS = False; // Set to True if using a RS-Members account. False if F2P.
+  WORLD_SWITCH = True; // Switch world when connecting to RS?
+  WORLD_LEAVE = True; // Hop words every ~25 minutes or so. WORLD_SWITCH must be true.
+
+  CbRange = 10;      // Reports all users with a combat level lower than this number.
+                     // Please do not set it too high; 10 is an okay number, and anyone who gets 10+ combat is probably botting somewhat correctly.
+
+  Autochecken = True; // Automatically check for updates and download the newer version of the script if it gets updated.
+
+  SRLStats_Username = ''; // Your SRL Stats Username (not RS!)
+  SRLStats_Password = ''; // Your SRL Stats Password (not RS!)
+
+
+////////////////////////////////////////////////////////////////////////////////
+//                                                                            //
+//   End of Basic Setup - you may continue down more IF you know what you're  //
+//          doing. If not, you will probably break something!...              //
+//                                                                            //
+////////////////////////////////////////////////////////////////////////////////
+
+  MOUSE_SPEED              = 15;
+  MOUSE_SPEED_RANDOMNESS   = 7;
+  // Mouse speed will be "MOUSE_SPEED + Random(MOUSE_SPEED_RANDOMNESS);".
+
+  DebugMe = False; // Get advanced debugs of current procedures. Not suggested.
+
+////////////////////////////////////////////////////////////////////////////////
+//                                                                            //
+//   End of Advanced Setup - really, do NOT touch anything below this....     //
+//           or you will probably break something......... :)                 //
+//                                                                            //
+////////////////////////////////////////////////////////////////////////////////
+
+  SCRIPT_NAME        = 'BotBuster';
+  SCRIPT_VERSION     = '0.1';
+
+var PlayerSessionTime,ReportTimer,AntiBansGlobal, BotsReportGlobal,
+     WorldLeaveMarker, StatsTimer, ProperReport : integer;
+
+procedure RandomRClickH; // phantombmx/EvilChicken - removed inv clicking
+var
+  M: Byte;
+  Inv: Boolean;
+begin
+  if (not LoggedIn) then exit;
+  M := MouseSpeed;
+  MouseSpeed := 7 + Random(25);
+  MouseBox(MSX1, MSY1, MIX2, MIY2, 2)
+  if (Random(3) > 0) then
+    Inv := ChooseOption('xamine');
+  if (not Inv) then ChooseOption('ancel');
+  MouseSpeed := M;
+end;
+
+procedure AntiBan_Short;
+begin
+  case (Random(400)) of
+    0: RandomRClickH;
+    1: MouseSpeed := MOUSE_SPEED + Random(MOUSE_SPEED_RANDOMNESS);
+    2: PickUpMouse;
+    3..400: begin
+      Wait(100 + Random(50));
+      Exit;
+    end;
+  end;
+  Inc(Players[CurrentPlayer].Integers[2]);
+  Inc(AntiBansGlobal);
+end;
+
+function FindVictim: Boolean;
+var
+  loadsaplayers: array of TPlayer;
+  pp: integer;
+  playerdone,fakename: string;
+begin
+  Result := False;
+  playerdone := '';
+  fakename := '';
+  if not LoggedIn or LobbyScreen then
+    Exit;
+
+  Wait(10+Random(100));
+  R_FindRandoms;
+  AntiBan_Short;
+  ClickToContinue;
+
+  loadsaplayers := GetAllPlayers;
+  try
+    for pp := 0 to (high(loadsaplayers)) do
+    begin
+      if (TimeFromMark(StatsTimer) > 360000) then // 6 minutes.
+      begin
+        Stats_Commit;
+        MarkTime(StatsTimer);
+        WriteLn('<! Sent stats in!');
+      end;
+      if loadsaplayers[pp].Name = Players[CurrentPlayer].Nick then
+        Wait(1) // Don't report yourself!
+      else
+      begin
+        if loadsaplayers[pp].Level > CbRange then
+          Continue; // Don't report someone with higher CB.
+        if loadsaplayers[pp].Level < 3 then
+          WriteLn('**** WARNING: Player Level Hooks are broken? Player with CB Level '+ toStr(loadsaplayers[pp].Level)+' ****');
+        fakename := loadsaplayers[pp].Name;
+        fakename := srl_Implode(srl_Explode(fakename, ' '), ''); // Remove spaces
+        fakename := srl_Implode(srl_Explode(fakename, '_'), ''); // Remove _'s
+        try playerdone := ReadIni('reported', fakename, AppPath+'BotBuster.ini');
+        except WriteLn('ReadIni Failed!'); end;
+        if playerdone = fakename then
+          Wait(1) // Already reported before.
+        else
+        begin
+          try WriteIni('reported', fakename, fakename, AppPath+'BotBuster.ini');
+          except WriteLn('WriteIni Failed!'); end;
+          writeLn('Checking "'+loadsaplayers[pp].Name+'" (level '+toStr(loadsaplayers[pp].Level)+')...');
+          case random(20) of
+            0: typeSend(loadsaplayers[pp].Name +', are you there');
+            1: typeSend(loadsaplayers[pp].Name +': are you there');
+            2: typeSend(loadsaplayers[pp].Name +', hello');
+            3: typeSend(loadsaplayers[pp].Name +': hello');
+            4: typeSend(loadsaplayers[pp].Name +', what''s up');
+            5: typeSend(loadsaplayers[pp].Name +': what''s up');
+            6: typeSend(loadsaplayers[pp].Name +', sup');
+            7: typeSend(loadsaplayers[pp].Name +': sup');
+            8: typeSend(loadsaplayers[pp].Name +', you there');
+            9: typeSend(loadsaplayers[pp].Name +': you there');
+            10: typeSend(loadsaplayers[pp].Name +', hi!');
+            11: typeSend(loadsaplayers[pp].Name +': hi!');
+            12: typeSend(loadsaplayers[pp].Name +', ello');
+            13: typeSend(loadsaplayers[pp].Name +': ello');
+            14: typeSend(loadsaplayers[pp].Name +', lvl?');
+            15: typeSend(loadsaplayers[pp].Name +': lvl?');
+            16: typeSend(loadsaplayers[pp].Name +': level?');
+            17: typeSend(loadsaplayers[pp].Name +': level?');
+            18: typeSend(loadsaplayers[pp].Name +', whats up');
+            19: typeSend(loadsaplayers[pp].Name +': whats up');
+          end;
+          repeat
+            wait(200+Random(2000));
+            Antiban_Short;
+            if not LoggedIn or LobbyScreen then Exit;
+            if IsChatBoxTextAnyLine(loadsaplayers[pp].Name,0) then
+            begin
+              WriteLn('They ('+loadsaplayers[pp].Name+') talked - probably an autoresponder but who cares; not reporting them!');
+              Inc(Players[CurrentPlayer].Integers[68]);
+              stats_incVariable('Loads Done', 1); // Loads Done = legits.
+              case random(4) of
+                0: typeSend('have a good day');
+                1: typeSend('bye');
+                2: typeSend('cya');
+                3: typeSend('have fun');
+              end;
+              Break;
+            end;
+            if (TimeFromMark(ProperReport) > 60000) then
+            begin
+              WriteLn('Reporting ('+loadsaplayers[pp].Name+') for Macroing!');
+              MouseBox(468, 486, 507, 500, 1); // report button
+              Wait(1000+Random(2000));
+              TypeSendEx(loadsaplayers[pp].Name, False);
+              Wait(500+Random(2000));
+              MouseBox(385, 131, 420, 138, 1); // "next" button
+              Wait(1000+Random(2000));
+              MouseBox(34, 236, 170, 253, 1); // macro violation button
+              Wait(100+Random(500));
+              MarkTime(ProperReport);
+              Wait(1000+Random(5000));
+              MouseBox(190, 181, 328, 188, 1); // dont ignore them
+              Inc(BotsReportGlobal);
+              Inc(Players[CurrentPlayer].Integers[69]);
+              stats_incVariable('Times Banked', 1); // Times Banked = bots reported.
+              Wait(1000+Random(5000));
+              Break;
+            end;
+          until (False);
+        end;
+      end;
+    end;
+  except
+    writeln('Failed @ Player Arrays');
+  end;
+
+end;
+
+procedure PrintReports;
+var
+  QC: array [0..1] of TStringArray; // Query = 0, Counter = 1.
+  I, II: Byte;
+begin
+  //ClearDebug;
+  WriteLn('[REPORT]');
+  SRLRandomsReport;
+  WriteLn('');
+
+  for II := 0 to 1 do
+    SetArrayLength(QC[II], 4);
+
+  QC[0] := ['Total runtime:',
+    'Players active:',
+    'Total bots reported:',
+    '-> Bots reported per hour:'];
+  QC[1] := [TimeRunning,
+    ToStr(PlayersActive) + ' out of ' + ToStr(HowManyPlayers),
+    ToStr(BotsReportGlobal),
+    ToStr((3600 * (BotsReportGlobal)) div (GetTimeRunning div 1000 + 1))];
+
+  WriteLn('<!---');
+  WriteLn('<! ' + Padr('Harry''s ' + SCRIPT_NAME, 35) + 'v' + SCRIPT_VERSION);
+  WriteLn('<!---');
+
+  II := High(QC[0]);
+  for I := 0 to II do
+    WriteLn('<! ' + Padr(QC[0][I], 32) + QC[1][I]);
+
+  WriteLn('<!---');
+  WriteLn('<! ## | Nick | A | Bots/Hr: | Legits/Hr: | Rand:')
+
+  for I := 0 to HowManyPlayers - 1 do
+    WriteLn('<! ' + Padr(ToStr(I),                                 3) +
+      '| ' + Padr(Copy(Players[I].Nick, 1, 4),                     5) +
+      '| ' + Padr(ToStr(Players[I].Active)[1],                     2) +
+      '| ' + Padr(ToStr(Players[I].Integers[69])+'/'+ToStr((3600 * (Players[I].Integers[69])) div (GetTimeRunning div 1000 + 1)),9) +
+      '| ' + Padr(toStr(Players[CurrentPlayer].Integers[68])+'/'+ToStr((3600 * (Players[I].Integers[68])) div (GetTimeRunning div 1000 + 1)),12) +
+      '| ' + Players[I].Rand);
+
+  WriteLn('<! Total anti-ban procedures run: '+ inttostr(AntiBansGlobal));
+  if WORLD_LEAVE then
+    WriteLn('<! World-hop in: '+ tostr(((Worldleavemarker + PlayerSessionTime) - (GetSystemTime)) div 60000) +' minutes.');
+  if LoggedIn and not LobbyScreen then
+    WriteLn('<! There are '+ToStr(Length(GetAllPlayers))+' bots for you to report!');
+
+  if (TimeFromMark(StatsTimer) > 360000) then // 6 minutes.
+  begin
+    Stats_Commit;
+    MarkTime(StatsTimer);
+    WriteLn('<! Sent stats in!');
+  end;
+
+  if (SRLStats_Username = '') then
+    WriteLn('<! Please consider getting your own stats username @ http://stats.villavu.com');
+
+  WriteLn('<!---');
+  WriteLn('[/REPORT]');
+end;
+
+procedure Player_OnLogIn;
+begin
+  Wait(1000+Random(2000));
+  if (R_FindRandoms) then
+    if (not Players[CurrentPlayer].Active) then
+    begin
+      WriteLn('Player is in a random.');
+      LogOut;
+      Players[CurrentPlayer].Active := False;
+      Players[CurrentPlayer].Status := 'InRandom';
+      Exit;
+    end;
+
+  MarkTime(PlayerSessionTime);
+  WorldLeaveMarker := (2100000 + Random(1500000) - Random(1500000)); // 2100000 ms = 35 minutes. 1500000 ms = 25 minutes. Add and subtract the 25 minutes from 35 giving a huge change of randomness for world-switching.
+  //Writeln(tostr(worldleavemarker));
+  SetAngle(True);
+  SetRun(True);
+  MarkTime(ProperReport);
+end;
+
+procedure Autoupdateme;
+var ClientUp, Neifile:integer;
+    OnlineVersion, NewScript, NeiFeilNennen:string;
+begin
+  if Autochecken then
+  begin
+    writeln('Checking for script updates...');
+    ClientUp := InitializeHTTPClient(False, False);
+    SetHTTPUserAgent(ClientUp,'Simba ' + SCRIPT_VERSION);
+    OnlineVersion := GetHTTPPage(ClientUp,'http://harry.lu/srl/botbuster-version.txt');
+    writeln(onlineversion);
+    writeln(script_version)
+    FreeHTTPClient(ClientUp);
+    if (Length(trim(OnlineVersion)) = 3) and (trim(OnlineVersion) > SCRIPT_VERSION) then
+    begin
+      writeLn('Newer script version online!');
+      writeLn('Autoupdating to newer version.');
+      ClientUp := InitializeHTTPClient(False,False);
+      SetHTTPUserAgent(ClientUp,'Simba');
+      NewScript := GetHTTPPage(ClientUp,'http://harry.lu/srl/botbuster-current.txt');
+      FreeHTTPClient(ClientUp);
+
+      NeiFeilNennen := AppPath + SCRIPT_NAME + ' v'+trim(OnlineVersion)+' [Pub] by Harry.simba';
+      Neifile := Rewritefile(NeiFeilNennen, true);
+      try
+        WriteFileString(Neifile, NewScript);
+      except
+        begin
+          writeLn('Fatal error writing to '+NeiFeilNennen+'!!');
+          terminatescript;
+        end;
+      end;
+      CloseFile(Neifile);
+      writeLn('New script downloaded and saved at '+NeiFeilNennen+' !! Please use this!');
+      TerminateScript;
+    end else
+    begin
+      if (Length(trim(OnlineVersion)) <> 3) then
+        WriteLn('Version checking failed (debug: length was not equal), you might be outdated.')
+        else writeLn('You have the latest version of the script!');
+      exit;
+    end;
+  end else
+    WriteLn('!!!!! Not checking for latest version, you may be outdated!');
+end;
+
+procedure SetUpScript;
+var
+  i: Integer;
+begin
+  ClearDebug;
+
+  Smart_Server := SERVER;
+  Smart_Signed := SIGNED;
+  Smart_Members:= MEMBERS;
+
+  Autoupdateme;
+
+  SetUpSRL;
+  Reincarnate := True;
+  DeclarePlayers;
+  SetUpReflectionEx(True);
+  LampSkill := 'attack';
+
+  if (SRLStats_Username = '') then
+    SetupSRLStats(119, 'Anonymous', 'anon1337')
+  else
+    SetupSRLStats(119, SRLStats_Username, SRLStats_Password);
+
+  MouseSpeed := MOUSE_SPEED + Random(MOUSE_SPEED_RANDOMNESS);
+  SRL_Procs[srl_AntiBan] := @AntiBan_Short;
+  SRL_Procs[srl_OnLogIn] := @Player_OnLogIn;
+
+  for i := 0 to High(Players) do
+  begin
+    if (WORLD_SWITCH) then
+      Players[i].WorldInfo := [Players[i].Member, -1, False];
+    Players[i].Integers[4] := 1;
+  end;
+
+  MarkTime(ProperReport);
+  ActivateClient;
+  Wait(1000 + Random(2000));
+end;
+
+procedure MainLoop;
+begin
+  LogInPlayer;
+
+  repeat
+    repeat
+      if (TimeFromMark(ReportTimer) > 60000) then // 1 minute
+      begin
+        PrintReports;
+        MarkTime(ReportTimer);
+      end;
+      FindVictim;
+      if (not LoggedIn) or LobbyScreen then
+      begin
+        Wait(5000+Random(5000));
+        if (not LoggedIn) or LobbyScreen then Break else Wait(1);
+      end;
+    until(False);
+    if LobbyScreen then
+      LeaveLobby;
+
+    WriteLn('Detected as logged out, NPlayer');
+    NextPlayer(Players[CurrentPlayer].Active);
+  until False;
+end;
+
+begin
+  SetUpScript;
+  MainLoop;
+end.
