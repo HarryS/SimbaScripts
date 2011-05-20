@@ -1,6 +1,6 @@
 {///////////////////////////////////////////////////////////////////////////////
 //                                                                            //
-//                        Harry's Lesser Slinger v1.1                         //
+//                        Harry's Lesser Slinger v1.2                         //
 //                                                                            //
 //   Requirements:                                                            //
 //     Level 1 (or higher - 40+ suggested) Range OR Magic.                    //
@@ -52,6 +52,7 @@
 //    0.9 - Sneaky reflection update broke an internal command.               //
 //    1.0 - Another reflection update.                                        //
 //    1.1 - Silly small typo, fixed.                                          //
+//    1.2 - SRL Stats.                                                        //
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
@@ -70,6 +71,7 @@ program LesserSlinger;
 {$i SRL/SRL.scar}
 {$i Reflection/Reflection.simba}
 {$i SRL/SRL/skill/magic.scar}
+{$i SRL/SRL/Misc/Stats.simba}
 
 procedure DeclarePlayers;
 begin
@@ -79,9 +81,9 @@ begin
 
   with Players[0] do
   begin
-    Name        := 'User';
-    Pass        := 'Pass';
-    Nick        := 'Nickname';
+    Name        := 'Username';
+    Pass        := 'Password';
+    Nick        := 'nickname';
     Booleans[1] := False; // Set to true if using Magic (wind rush).
     Member      := False;
     Active      := True;
@@ -98,6 +100,9 @@ const
   PTele   = True; // Set to true to telegrab, if possible. Will not cast if your mage is too low/no runes.
 
   Autochecken = True; // Automatically check for updates and download the newer version of the script if it gets updated.
+
+  SRLStats_Username = ''; // Your SRL Stats Username (not RS!)
+  SRLStats_Password = ''; // Your SRL Stats Password (not RS!)
 
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
@@ -120,14 +125,13 @@ const
 ////////////////////////////////////////////////////////////////////////////////
 
   SCRIPT_NAME        = 'Lesser Slinger';
-  SCRIPT_VERSION     = '1.1';
-  SECRET_GOOGLE_CODE = 'ZdKsasddErVs'; // Ignore this.
+  SCRIPT_VERSION     = '1.2';
 
   MaxOthers = 4; // Maximum number of people inside the demon room before you switch worlds.
                  // Default (4) should work for most people.
 
 var FindFail,PlayerSessionTime,ReportTimer,DemonsPwnedGlobal,AntiBansGlobal,
-     WorldLeaveMarker,WorldsHopped : integer;
+     WorldLeaveMarker,WorldsHopped,StatsTimer : integer;
 
 function CheckForRandoms(CheckTime: Integer): Boolean;
 var
@@ -407,7 +411,7 @@ begin
         begin
           Inc(Players[CurrentPlayer].Integers[1]);
           Inc(DemonsPwnedGlobal);
-          //Inc(Stats_CustomVars[1]);
+          stats_IncVariable('Monsters Killed', 1);
           if (R_FlagExists) then
             R_Flag;
           MarkTime(FightFailsafe);
@@ -481,14 +485,21 @@ begin
   WriteLn('<! Total anti-ban procedures run: '+ inttostr(AntiBansGlobal));
   if WORLD_LEAVE then
   begin
-    WriteLn('World-hop in: '+ tostr(((Worldleavemarker + PlayerSessionTime) - (GetSystemTime)) div 60000) +' minutes.');
+    WriteLn('<! World-hop in: '+ tostr(((Worldleavemarker + PlayerSessionTime) - (GetSystemTime)) div 60000) +' minutes.');
     if (PlayersAround < 2) then
       WriteLn('You are alone on this world, not hopping until someone else comes around!');
   end;
-//  if Stats_ID = '' then
-//    WriteLn('<! PLEASE GET A STATS ACCOUNT AT http://scriptmanager.freehostia.com/ AND CONFIGURE IT INTO THE SCRIPT!');
-//  if Stats_PW = '' then
-//    WriteLn('<! PLEASE GET A STATS ACCOUNT AT http://scriptmanager.freehostia.com/ AND CONFIGURE IT INTO THE SCRIPT!');
+
+  if (TimeFromMark(StatsTimer) > 360000) then // 6 minutes.
+  begin
+    Stats_Commit;
+    MarkTime(StatsTimer);
+    WriteLn('<! Sent stats in!');
+  end;
+
+  if (SRLStats_Username = '') then
+    WriteLn('<! Please consider getting your own stats username @ http://stats.villavu.com');
+
   WriteLn('<!---');
   WriteLn('[/REPORT]');
 end;
@@ -616,13 +627,6 @@ var
 begin
   ClearDebug;
 
-//  if Stats_ID = '' then
-//    WriteLn('Please get a stats account at http://scriptmanager.freehostia.com/ and configure it into the script!');
-
-//  Stats_UserID   := Stats_ID;
-//  Stats_Password := Stats_PW;
-  //Stats_ScriptID := '89';
-
   Smart_Server := SERVER;
   Smart_Signed := SIGNED;
   Smart_Members:= MEMBERS;
@@ -632,6 +636,11 @@ begin
   SetUpSRL;
   DeclarePlayers;
   SetUpReflectionEx(True);
+
+  if (SRLStats_Username = '') then
+    SetupSRLStats(20, 'Anonymous', 'anon1337')
+  else
+    SetupSRLStats(20, SRLStats_Username, SRLStats_Password);
 
   MouseSpeed := MOUSE_SPEED + Random(MOUSE_SPEED_RANDOMNESS);
   SRL_Procs[srl_AntiBan] := @AntiBan_Short;
@@ -670,3 +679,4 @@ begin
   SetUpScript;
   MainLoop;
 end.
+
