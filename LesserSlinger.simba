@@ -1,6 +1,6 @@
 {///////////////////////////////////////////////////////////////////////////////
 //                                                                            //
-//                        Harry's Lesser Slinger v1.2                         //
+//                        Harry's Lesser Slinger v1.3                         //
 //                                                                            //
 //   Requirements:                                                            //
 //     Level 1 (or higher - 40+ suggested) Range OR Magic.                    //
@@ -53,6 +53,7 @@
 //    1.0 - Another reflection update.                                        //
 //    1.1 - Silly small typo, fixed.                                          //
 //    1.2 - SRL Stats.                                                        //
+//    1.3 - Demon relocation improved to hopefully never get lost.            //
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
@@ -125,7 +126,7 @@ const
 ////////////////////////////////////////////////////////////////////////////////
 
   SCRIPT_NAME        = 'Lesser Slinger';
-  SCRIPT_VERSION     = '1.2';
+  SCRIPT_VERSION     = '1.3';
 
   MaxOthers = 4; // Maximum number of people inside the demon room before you switch worlds.
                  // Default (4) should work for most people.
@@ -157,16 +158,21 @@ begin
   until (TimeFromMark(tiMark) > CheckTime);
 end;
 
+function r_TileOnMSH(moix,moiy: integer) : Boolean; // Drags111
+begin
+  Result := PointInBox(Point(moix,moiy), IntToBox(MSX1, MSY1, MSX2, MSY2));
+end;
+
 function NotInDemonRoom: boolean;
 var wTile: TPoint; LagTries: integer;
 begin
-  if (DistanceFrom(Tile(3110, 3160)) > 3) then // Tile is inside demon room // or (GetPlaneIndex <> 3)
+  if (DistanceFrom(Tile(3110, 3159)) > 2) then // Tile is inside demon room // or (GetPlaneIndex <> 3)
   begin
     Writeln('Detected you outside of demon room - waiting a few seconds to know for sure.');
     Wait(500+Random(1000));
     R_FindRandoms; // Maybe you triggered a random?
     Wait(3000+Random(3000)); // Anti-lag problems.
-    if (DistanceFrom(Tile(3110, 3160)) > 3) then
+    if (DistanceFrom(Tile(3110, 3159)) > 2) then
       Result := True
     else
       Result := False;
@@ -175,8 +181,8 @@ begin
     if Result then
     begin // Booooom helped a bit here when I was lazy ;)
       WriteLn('You probably fell out of the room - let''s walk back in.');
-      wTile := TileToMM(Tile(3110, 3160));
-      if not rs_OnMiniMap(wTile.X, wTile.Y) then
+      wTile := TileToMS(Tile(3110, 3159),600);
+      if not r_TileOnMSH(wTile.X, wTile.Y) then
       begin
         WriteLn('Tile doesn''t exist, o noes! Exiting.');
         Result := True;
@@ -187,9 +193,17 @@ begin
         WriteLn('Tile found, walking to it.');
         repeat
           Inc(LagTries);
-          Mouse(wTile.x, wTile.y, 1, 1, true);
+          Mouse(wTile.x, wTile.y, 5, 5, true);
+          r_FFlag(0);
           Wait(RandomRange(3000, 5000));
-        until (LagTries > 3) or (DistanceFrom(Tile(3110, 3160)) < 3);
+          wTile := TileToMS(Tile(3110, 3159),600);
+          if not r_TileOnMSH(wTile.X, wTile.Y) then
+          begin
+            WriteLn('Tile doesn''t exist, o noes! Exiting.');
+            Result := True;
+            Exit;
+          end;
+        until (LagTries > 3) or (DistanceFrom(Tile(3110, 3159)) < 2);
         if LagTries > 3 then
         begin
           WriteLn('Could not get back into room, oh noes, we failed.');
@@ -487,7 +501,7 @@ begin
   begin
     WriteLn('<! World-hop in: '+ tostr(((Worldleavemarker + PlayerSessionTime) - (GetSystemTime)) div 60000) +' minutes.');
     if (PlayersAround < 2) then
-      WriteLn('You are alone on this world, not hopping until someone else comes around!');
+      WriteLn('<! You are alone on this world, not hopping until someone else comes around!');
   end;
 
   if (TimeFromMark(StatsTimer) > 360000) then // 6 minutes.
@@ -679,4 +693,3 @@ begin
   SetUpScript;
   MainLoop;
 end.
-
