@@ -1,0 +1,219 @@
+program HarrysAmazingTutIslandRunner; // This script is simple but should be stable. Please don't use most of these functions (i.e. coordclicking) "online".
+{$DEFINE SMART}
+{$i SRL/SRL.scar}
+
+const
+  SERVER  = 61;    // Enter "0" to pick a random server.
+  SIGNED  = True;  // Use the signed RS-client? Leave at True unless you know what you're doing.
+  MEMBERS = False; // Set to True if using a RS-Members account. False if F2P.
+
+  EmailSeed = 'fff';
+  EmailMeat = 'numbers';
+  EmailSufx = 'derp.lu';
+  // Seed = beginning part.
+  // Meat = what to fill between Seed and Sufx.
+  // Sufx = end part aka domain-name.
+  //
+  // Example:
+  // Seed='h',Meat='numbers',Sufx='fake.tld'
+  // Script will make accounts h[1..infinity]@fake.tld
+  EmailBegn = '1';
+  // What number to begin on? (keep at 1 if you don't know what to do).
+  Passwort = 'moneyboy98';
+  // Password to use on all accounts.
+  SuggestedUsernames = True;
+  // (Must be True) Use the randomly suggested in-game-names by Jagex
+
+  Autochecken = True; // Check for script updates.
+  SCRIPT_VERSION = '0.1'; // Don't touch.
+  SCRIPT_NAME = 'Account Maker'; // Don't touch.
+
+function Warten(warum: string): boolean;
+var zeit: integer;
+begin
+  Result := False;
+  MarkTime(zeit);
+  repeat
+    case warum of
+      'rsready': Result := (GetColor(745, 17) = 12312554);
+      'freescreen': Result := (GetColor(310,77) = 12378347);
+      'green1': Result := (GetColor(496,150) = 5614450);
+      'success1':
+      begin
+        Result := (GetColor(454, 71) = 12378347);
+        if Result then Exit;
+        Result := (GetColor(647, 123) = 12378347);
+        if Result then
+        begin
+          WriteLn('You''ve been blocked for making so many accounts. Will retry in a minute.');
+          Wait(20000+Random(40000)); // 20s+40s random.
+          Mouse(290,384,0,0,True); // Continue again.
+          MarkTime(zeit); // eh, so we don't time out.
+          Result := False;
+        end;
+      end;
+      'selectchar': Result := (GetColor(206, 30) = 1186596);
+      'continue2': Result := (GetColor(682, 477) = 0);
+      'name1': Result := (GetColor(267, 138) = 12378347);
+      'name2': Result := (GetColor(252, 244) = 12378347);
+      'login': Result := LoggedIn;
+      else WriteLn('Nonexistant choice '+warum+'!!!');
+    end;
+    if Result then Exit;
+    WriteLn('Waiting for '+warum+'...');
+    Wait(500);
+  until (TimeFromMark(zeit) > 30000);
+  if (TimeFromMark(zeit) > 30000) then
+  begin
+    WriteLn('Script took more than 30 seconds on '+warum+'. Stopping script! Please feel free to upload screenshot and bug report.');
+    TerminateScript;
+  end;
+end;
+
+procedure Autoupdateme;
+var ClientUp, Neifile:integer;
+    OnlineVersion, NewScript, NeiFeilNennen:string;
+begin
+  if Autochecken then
+  begin
+    writeln('Checking for script updates...');
+    ClientUp := InitializeHTTPClient(False, False);
+    SetHTTPUserAgent(ClientUp,'Simba ' + SCRIPT_VERSION);
+    OnlineVersion := GetHTTPPage(ClientUp,'http://harry.lu/srl/accountmaker-version.txt');
+    writeln(onlineversion);
+    writeln(script_version)
+    FreeHTTPClient(ClientUp);
+    if (Length(trim(OnlineVersion)) = 3) and (trim(OnlineVersion) > SCRIPT_VERSION) then
+    begin
+      writeLn('Newer script version online!');
+      writeLn('Autoupdating to newer version.');
+      ClientUp := InitializeHTTPClient(False,False);
+      SetHTTPUserAgent(ClientUp,'Simba');
+      NewScript := GetHTTPPage(ClientUp,'http://harry.lu/srl/accountmaker-current.txt');
+      FreeHTTPClient(ClientUp);
+
+      NeiFeilNennen := AppPath + SCRIPT_NAME + ' v'+trim(OnlineVersion)+' [Pub] by Harry.simba';
+      Neifile := Rewritefile(NeiFeilNennen, true);
+      try
+        WriteFileString(Neifile, NewScript);
+      except
+        begin
+          writeLn('Fatal error writing to '+NeiFeilNennen+'!!');
+          terminatescript;
+        end;
+      end;
+      CloseFile(Neifile);
+      writeLn('New script downloaded and saved at '+NeiFeilNennen+' !! Please use this!');
+      TerminateScript;
+    end else
+    begin
+      if (Length(trim(OnlineVersion)) <> 3) then
+        WriteLn('Version checking failed (debug: length was not equal), you might be outdated.')
+        else writeLn('You have the latest version of the script!');
+      exit;
+    end;
+  end else
+    WriteLn('!!!!! Not checking for latest version, you may be outdated!');
+end;
+
+var curprog: integer; curname: string;
+begin
+  if not SuggestedUsernames then
+  begin
+    WriteLn('No support for non-suggested usernames. Set SuggestedUsernames=True. Problem, script runner?');
+    TerminateScript;
+  end;
+  if not (EmailMeat = 'numbers') then
+  begin
+    WriteLn('EmailMeat must equal ''numbers'', sorry!');
+    TerminateScript;
+  end;
+  curprog := strToInt(EmailBegn);
+  Smart_Server := SERVER;
+  Smart_Signed := SIGNED;
+  Smart_Members:= MEMBERS;
+  SetUpSRL;
+  repeat
+    Warten('rsready');
+    Mouse(379, 396,0,0,True); // "Create Account Now" button
+    Wait(100);
+    Warten('freescreen');
+    Mouse(266,149,0,0,True); // Email 1 box.
+    Wait(10);
+    curname := EmailSeed + toStr(curprog) + '@' + EmailSufx;
+    WriteLn('Making Player '+ curname);
+    TypeSendEx(curname, False);
+    Wait(10);
+    Mouse(260,178,0,0,True); // Email 2 box.
+    Wait(10);
+    Warten('green1');
+    Wait(10);
+    TypeSendEx(curname, False);
+    Wait(10);
+    Mouse(261,215,0,0,True); // Passwort 1 box.
+    Wait(10);
+    TypeSendEx(Passwort,False);
+    Wait(10);
+    Mouse(261,241,0,0,True); // Passwort 2 box.
+    Wait(10);
+    TypeSendEx(Passwort,False);
+    Wait(10);
+    Mouse(256,275,0,0,True); // Age box.
+    Wait(10);
+    TypeSendEx(toStr(18+Random(18)),False);
+    Wait(10);
+    Mouse(86,309,0,0,True); // Unsubscribe from Jagex newsletter.
+    Wait(10);
+    Mouse(290,384,0,0,True); // Continue and make account.
+    Wait(10);
+    Warten('success1');
+    Wait(10);
+    Mouse(379,409,0,0,True); // Continue 2.
+    Wait(10);
+    Warten('selectchar');
+    Wait(10);
+    if Random(2) = 0 then
+      Mouse(287,29,0,0,True) // Male..
+    else                     // oder..
+      Mouse(363,29,0,0,True);// Female?
+    Wait(10);
+    MouseBox(425,36,700,40,1); // Skin colour.
+    Wait(10);
+    MouseBox(14,73,744, 220,1); // Character type.
+    Wait(1000+Random(2000));
+    Mouse(700,479,0,0,True); // Continue 1.
+    Wait(10);
+    Warten('continue2');
+    Wait(10);
+    Mouse(700,479,0,0,True); // Continue 2.
+    Wait(10);
+    Warten('name1');
+    Wait(10);
+    TypeSendEx('zezima',False); // Get a random suggestion.
+    Wait(10);
+    Mouse(206,355,0,0,True); // Continue button.
+    Warten('name2');
+    Wait(10);
+    Mouse(86,267,0,0,True); // Choose new suggested name.
+    Wait(1000+Random(2000));
+    Mouse(206,355,0,0,True); // Continue 2 button.
+    Wait(10);
+    Warten('login');
+    Wait(10);
+    Mouse(637,126,10,10,True); // Random minimap walk.
+    Wait(100+Random(2000));
+    if Random(2) = 0 then
+      MakeCompass('E')
+    else
+      MakeCompass('W');
+    Wait(100+Random(2000));
+    MakeCompass('N');
+    Wait(100+Random(2000));
+    FFlag(0);
+    Logout;
+    Wait(10);
+    Warten('rsready');
+    Wait(10);
+    Inc(curprog);
+  until False;
+end.
