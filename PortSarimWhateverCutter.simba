@@ -1,10 +1,10 @@
 {///////////////////////////////////////////////////////////////////////////////
 //                                                                            //
-//                   Harry's Port Sarim Whatever Cutter v0.8                  //
+//                   Harry's Port Sarim Whatever Cutter v0.9                  //
 //                                                                            //
 //   Requirements:                                                            //
 //     Level 1+ woodcutting, axe wielded or in first inventory slot.          //
-//     Start near willow trees, at Port Sarim (http://i.imgur.com/EtIOp.png)  //
+//     Start anywhere, but PortSarim is best (http://i.imgur.com/EtIOp.png)   //
 //     It is best to be wielding your axe, but not required. Keep in slot 1.  //
 //     Edit the consts below (DeclarePlayers, basic setup.)                   //
 //     Latest Simba with latest SRL and Reflection.                           //
@@ -15,6 +15,7 @@
 //     Picks up birds-nests if you are a RS Member.                           //
 //     In the rare chance you die, will death-walk back to Port Sarim.        //
 //       You will probably die more often if you are a lvl-3, so go level cb! //
+//     Grabs an axe from Bob in Lumbridge if you do not have one.             //
 //     Script is designed to "never stop", should run until a random breaks.  //
 //     QUALITY SCRIPT                                                         //
 //     Auto-updating!                                                         //
@@ -39,6 +40,8 @@
 //    0.6 - Fixed for the horrible and ugly RuneScape graphics update.        //
 //    0.7 - Yew support - make const DoYews=True to activate.                 //
 //    0.8 - Drastically improved Yew switching speed.                         //
+//    0.9 - Grab an axe from Bob if you don't have one.                       //
+//            Random nextplayer, level goals, and numerous other tweaks.      //
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
@@ -85,6 +88,9 @@ const
   WORLD_LEAVE = True; // Hop words every ~25 minutes or so. WORLD_SWITCH must be true.
   DoYews  = False; // Chop Yews? (Not suggested due to them being such slow exp)
   YewAt   = 60;  // What level to begin Yew cutting at. DoYews must be true for this to activate.
+  WCGoal = 99; // Stop player at this woodcutting level.
+  AxeGrab = True; // Grab a bronze axe for free from Bob @ lumbridge, if your current axe gets lost.
+  RandomNP = True; // Random NextPlayer (chooses random player to run next if using multiplayer).
 
   Autochecken = True; // Automatically check for updates and download the newer version of the script if it gets updated.
 
@@ -113,7 +119,7 @@ const
 ////////////////////////////////////////////////////////////////////////////////
 
   SCRIPT_NAME        = 'Port Sarim Whatever Cutter';
-  SCRIPT_VERSION     = '0.8';
+  SCRIPT_VERSION     = '0.9';
 
 var PlayerSessionTime,ReportTimer,AntiBansGlobal, WillowsCutGlobal, BirdieGlobal,
      WorldLeaveMarker,WorldsHopped, DethWelks, StatsTimer, AtkFasf, notcooldood,
@@ -139,7 +145,8 @@ Begin
       Begin
         Result := I = High(CtrlPoints);
         R_FindRandoms;
-        LeaveDangerZone;
+        if LeaveDangerZone then
+          Wait(500+Random(2000));
         Break;
       End;
     R_FindRandoms;
@@ -149,6 +156,14 @@ End;
 function r_TileOnMSH(moix,moiy: integer) : Boolean; // Drags111
 begin
   Result := PointInBox(Point(moix,moiy), IntToBox(MSX1, MSY1, MSX2, MSY2));
+end;
+
+procedure NPH(staytus: boolean);
+begin
+  if RandomNP then
+    RandomNextPlayer(staytus)
+  else
+    NextPlayer(staytus);
 end;
 
 function NotSafeZone: boolean;
@@ -212,14 +227,6 @@ begin
           WriteLn('We have the power to teleabort!');
           GameTab(Tab_Magic);
           Cast('lumbridge home teleport', False);
-          Wait(2000+Random(2000));
-          if IsChatBoxTextAnyLine('another',0) then
-          begin
-            WriteLn('Teleabort timer-blocked! Other user can take the lead.');
-            Result := False;
-            NextPlayer(True);
-            Exit;
-          end;
           Wait(15000+Random(10000));
           WriteLn('(Probably) back in lumby via teleport!');
           if (DistanceFrom(Tile(3222,3219)) < 50) then
@@ -300,19 +307,19 @@ begin
         writeLn('Not logged in, but at lobby screen - there is a chance you''re not broken.');
         writeLn('Probably not broken - nextplayer true.');
         LeaveLobby;
-        NextPlayer(True);
+        NPH(True);
         Exit;
       end;
       writeLn('Not logged in - there is a chance you''re not broken.');
       writeLn('Probably not broken - nextplayer true.');
-      NextPlayer(True);
+      NPH(True);
       Exit;
     end else
     begin
       writeLn('Reflection tiles say you''re not near the Port and logged in.');
       writeLn('In random or broken; logging out for your saftey - nextplayer false.');
       Players[CurrentPlayer].Rand := 'PlayerLost1';
-      nextPlayer(False);
+      NPH(False);
       Exit;
     end;
   end;
@@ -434,6 +441,141 @@ begin
   writeln('Yay, probably opened deposit box.');
 end;
 
+procedure DepositH; // by SRL etc, riced by me
+var
+   I, T, x, y,tti: Integer;
+   B: TBox;
+begin
+  tti := 0;
+  repeat
+    inc(tti);
+    for I := 2 to 28 do
+    begin
+      B := DepositItemBox(I);
+      if (not(FindColor(X, Y, srl_outline_black, B.X1, B.Y1, B.X2, B.Y2))) then
+        Continue;
+      Mouse((B.X1 + B.X2) shr 1, (B.Y1 + B.Y2) shr 1, 0, 0, False);
+      WaitOptionMulti(['Deposit-All', 'Deposit'], 200);
+      T := GetSystemTime;
+      Wait(RandomRange(10, 600));
+    end;
+    if not hInvFull then
+      Exit;
+    Wait(200+Random(2000));
+  until(tti > 6);
+end;
+
+procedure GrabANewAxe;
+var b0b: TNPCArray; P: TPoint;
+begin
+  if not AxeGrab then
+  begin
+    WriteLn('Bob Axe support disabled (AxeGrab=False). Bye bye!');
+    Players[CurrentPlayer].Loc := 'NewAxe1';
+    NPH(False);
+    Exit;
+  end;
+  WriteLn('Grabbing a new axe at Bob.');
+  if TabExists(Tab_Magic) then
+  begin
+    WriteLn('We have the power to teleabort!');
+    GameTab(Tab_Magic);
+    Cast('lumbridge home teleport', False);
+    Wait(15000+Random(10000));
+    WriteLn('(Probably) back in lumby via teleport!');
+    if (DistanceFrom(Tile(3222,3219)) < 50) then
+    begin
+      if R_ItemSlotExists(1) then
+      begin
+        if R_ItemSlotExists(28) then
+          DropItem(28);
+        DragItem(1,28);
+      end;
+      R_WebWalkH(Tile(3230,3203));
+      R_FFlag(0);
+      Wait(3000+Random(5000));
+      b0b := SortNPCs(GetNPCs('Bob'));
+      if GetArrayLength(b0b) = 0 then
+      begin
+        WriteLn('No Bob found, gotta die!');
+        Players[CurrentPlayer].Loc := 'BobFail3';
+        NPH(False);
+        Exit;
+      end;
+      if not TileOnMS(b0b[0].Tile, 600) then
+      begin
+        WriteLn('No Bob found, gotta die!');
+        Players[CurrentPlayer].Loc := 'BobFail5';
+        NPH(False);
+        Exit;
+      end;
+      begin
+        try
+          P := TileToMS(b0b[0].Tile, 600);
+        except
+          WriteLn('Failed to find Bob.');
+          Players[CurrentPlayer].Loc := 'BobFail7';
+          NPH(False);
+          Exit;
+        end;
+        if (toStr(P.X) = '-1') or (toStr(P.Y) = '-1') then
+        begin
+          WriteLn('Failed to find Bob -1,-1.');
+          Players[CurrentPlayer].Loc := 'BobFail9';
+          NPH(False);
+          Exit;
+        end;
+        Mouse(P.X,P.Y,3,3,False);
+        Wait(20+Random(300));
+        if R_ChooseOption('rade Bob') then
+        begin
+          R_FFlag(0);
+          Wait(3000+Random(5000));
+          Mouse(103,67,10,10,False);
+          Wait(20+Random(300));
+          if R_ChooseOption('ake 1 ') then
+          begin
+            WriteLn('Got axe properly!');
+            Wait(2000+Random(5000));
+            Mouse(655,31,10,10,True);
+            R_FFlag(0);
+            Wait(Random(2000));
+            R_ClickItem(1, True, '');
+            Wait(Random(2000));
+            WriteLn('Logging out to clear chat box.');
+            NPH(True);
+            Exit;
+          end
+          else
+          begin
+            WriteLn('Failed to take axe.');
+            Players[CurrentPlayer].Loc := 'BobFail22';
+            NPH(False);
+            Exit;
+          end;
+        end
+        else
+        begin
+          WriteLn('Failed to click Bob.');
+          Players[CurrentPlayer].Loc := 'BobFail24';
+          NPH(False);
+          Exit;
+        end;
+      end;
+    end else
+    begin
+      WriteLn('Lumby tele failed, gotta kill your guy.');
+      Players[CurrentPlayer].Loc := 'BobFail1';
+      NPH(False);
+      Exit;
+    end;
+  end else
+  begin
+    WriteLn('No magic tab to tele, gotta kill your guy.');
+    Players[CurrentPlayer].Loc := 'BobFail2';
+  end;
+end;
+
 function BankinDat(whereto: string): boolean;
 var FailTimes,PinFails: integer;
 begin
@@ -451,6 +593,31 @@ begin
   end else
   begin
     r_WebWalkH(Tile(3047,3236)); // PSDB tile
+    Wait(10+Random(500));
+    if (Pos('hatchet',GetItemNameAt(1)) = 0) then
+    begin
+      if not Players[CurrentPlayer].Booleans[9] then // axe in inv
+      begin
+        WriteLn('No axe in inv?.. Waiting.');
+        wait(1000+Random(1000));
+        if (Pos('hatchet',GetItemNameAt(1)) = 0) then
+        begin
+          WriteLn('No axe 2x. Gotta kill player.');
+          WriteLn('Please equip an axe next time, it is more "stable".');
+          Players[CurrentPlayer].Loc := 'AxeFail1';
+          NPH(False);
+          Exit;
+        end;
+        WriteLn('Alles klar.');
+      end
+      else
+      if DebugMe then WriteLn('Axe still there!');
+    end else
+    if Players[CurrentPlayer].Booleans[9] then // wielded axe, but one in inv?
+    begin
+      Players[CurrentPlayer].Booleans[9] := False;
+      WriteLn('You have an axe in your inv... please set DeclatePlayer Booleans[9] to False next time.');
+    end;
     R_FFlag(0);
     wait(100+Random(500));
     FailTimes := 0;
@@ -476,14 +643,14 @@ begin
       Players[CurrentPlayer].Rand := 'FailBankFind1';
       CloseBank;
       Logout;
-      NextPlayer(False);
+      NPH(False);
       Exit;
     end;
-    Wait(10+Random(500));
+
     if Players[CurrentPlayer].Booleans[9] then // is wielded
       Mouse(340, 275, 15, 10, True) // Deposit button, straight from SRL.
     else
-      Deposit(2,28,True); // axe in slot 1.
+      DepositH; // axe in slot 1.
     IncEx(WillowsCutGlobal,28);
     IncEx(Players[CurrentPlayer].Integers[69],28);
     case Players[CurrentPlayer].Strings[7] of
@@ -512,8 +679,7 @@ begin
         stats_IncVariable('Total EXP Gained', 4900); // 175 exp per yew
       end;
     end;
-    Wait(10+Random(500));
-    Wait(1+Random(42));
+    Wait(10+Random(542));
     Result := True;
     BankinDat('leave');
     Exit;
@@ -623,7 +789,7 @@ begin
       begin
         WriteLn('Failed 6x skil grabbing. Something is wrong.');
         Players[CurrentPlayer].Loc := 'FailSkillGrab1';
-        NextPlayer(False);
+        NPH(False);
         Exit;
       end
       else
@@ -676,6 +842,13 @@ begin
   if not LoggedIn or LobbyScreen then
     Exit;
 
+  if (R_GetSkillLevel(Skill_Woodcutting) >= WCGoal) then
+  begin
+    WriteLn('WCGoal has been hit - congrats!');
+    Players[CurrentPlayer].Loc := 'WCGoal';
+    NPH(False);
+  end;
+
   if hInvFull then
     BankinDat('okaydude');
 
@@ -688,31 +861,10 @@ begin
   if Random(2) = 0 then
     if IsChatBoxTextAnyLine('hatchet which',0) then
     begin
-      WriteLn('Chat claims you don''t have an axe anymore, or your level is too low. NP(False);');
-      Players[CurrentPlayer].Loc := 'NoAxe1';
-      NextPlayer(False);
+      WriteLn('Chat claims you don''t have an axe anymore, or your level is too low.');
+      GrabANewAxe;
       Exit;
     end;
-  if (Pos('hatchet',GetItemNameAt(1)) = 0) then
-  begin
-    if not Players[CurrentPlayer].Booleans[9] then // axe in inv
-    begin
-      WriteLn('No axe in inv?.. Waiting.');
-      wait(1000+Random(1000));
-      WriteLn('No axe 2x. Gotta kill player.');
-      WriteLn('Please equip an axe next time, it is more "stable".');
-      Players[CurrentPlayer].Loc := 'AxeFail1';
-      NextPlayer(False);
-      Exit;
-    end
-    else
-    if DebugMe then WriteLn('Axe still there!');
-  end else
-  if Players[CurrentPlayer].Booleans[9] then // wielded axe, but one in inv?
-  begin
-    Players[CurrentPlayer].Booleans[9] := False;
-    WriteLn('You have an axe in your inv... please set DeclatePlayer Booleans[9] to False next time.');
-  end;
 
   if WORLD_LEAVE then // Ugly, but was annoying with "True and is not needed" errors.
     if (TimeFromMark(PlayerSessionTime) > WorldLeaveMarker) then
@@ -722,7 +874,7 @@ begin
       if HowManyPlayers = 1 then
         ChangeWorld(RandomWorld(Players[CurrentPlayer].Member, False))
       else
-        NextPlayer(True);
+        NPH(True);
     end;
 
   PreWalk := 0;
@@ -783,7 +935,7 @@ begin
         Players[CurrentPlayer].Loc := '15MinutesNoTree';
         CloseBank;
         Logout;
-        NextPlayer(False);
+        NPH(False);
         Exit;
       end;
       Exit;
@@ -811,7 +963,7 @@ begin
       begin
         Mouse(lx,ly,0,0,True);
         curtile := Weidenbaum.Tile;
-        Result := r_WaitCrossHairColor(CROSSHAIR_RED, 1000+Random(100)-Random(100));
+        Result := r_WaitCrossHairColor(CROSSHAIR_RED, 500+Random(100)-Random(100));
         if Result then
           AtkFasf := 0;
       end;
@@ -820,7 +972,7 @@ begin
       begin
         Mouse(lx,ly,0,0,True);
         curtile := Weidenbaum.Tile;
-        Result := r_WaitCrossHairColor(CROSSHAIR_RED, 1000+Random(100)-Random(100));
+        Result := r_WaitCrossHairColor(CROSSHAIR_RED, 500+Random(100)-Random(100));
         if Result then
           AtkFasf := 0;
       end;
@@ -829,7 +981,7 @@ begin
       begin
         Mouse(lx,ly,0,0,True);
         curtile := Weidenbaum.Tile;
-        Result := r_WaitCrossHairColor(CROSSHAIR_RED, 1000+Random(100)-Random(100));
+        Result := r_WaitCrossHairColor(CROSSHAIR_RED, 500+Random(100)-Random(100));
         if Result then
           AtkFasf := 0;
       end;
@@ -838,7 +990,7 @@ begin
       begin
         Mouse(lx,ly,0,0,True);
         curtile := Weidenbaum.Tile;
-        Result := r_WaitCrossHairColor(CROSSHAIR_RED, 1000+Random(100)-Random(100));
+        Result := r_WaitCrossHairColor(CROSSHAIR_RED, 500+Random(100)-Random(100));
         if Result then
           AtkFasf := 0;
       end;
@@ -866,14 +1018,6 @@ begin
           WriteLn('We have the power to teleabort!');
           GameTab(Tab_Magic);
           Cast('lumbridge home teleport', False);
-          Wait(2000+Random(2000));
-          if IsChatBoxTextAnyLine('another',0) then
-          begin
-            WriteLn('Teleabort timer-blocked! Other user can take the lead.');
-            Result := False;
-            NextPlayer(True);
-            Exit;
-          end;
           Wait(15000+Random(10000));
           if (DistanceFrom(Tile(3222,3219)) < 50) then
           begin
@@ -884,7 +1028,7 @@ begin
           WriteLn('Something is very FUBAR with your player. He will be executed now.');
           Players[CurrentPlayer].Rand := 'FUBAR90x';
           Logout;
-          NextPlayer(False);
+          NPH(False);
           Exit;
         end;
     end;
@@ -960,7 +1104,7 @@ begin
   QC[1] := [TimeRunning,
     ToStr(PlayersActive) + ' out of ' + ToStr(HowManyPlayers),
     ToStr(WillowsCutGlobal),
-    ToStr((3600 * (WillowsCutGlobal)) div (GetTimeRunning div 1000 + 1))];
+    ToStr((3600 * (WillowsCutGlobal)) div (GetTimeRunning div 1000 + 1) * HowManyPlayers)];
 
   WriteLn('<!---');
   WriteLn('<! ' + Padr('Harry''s ' + SCRIPT_NAME, 35) + 'v' + SCRIPT_VERSION);
@@ -978,8 +1122,8 @@ begin
       '| ' + Padr(Copy(Players[I].Nick, 1, 4),                     5) +
       '| ' + Padr(ToStr(Players[I].Active)[1],                     2) +
       '| ' + Padr(ToStr(Players[I].Integers[42]), 4) +
-      '| ' + Padr(ToStr(Players[I].Integers[69])+'/'+ToStr((3600 * (Players[I].Integers[69])) div (GetTimeRunning div 1000 + 1)),12) +
-      '| ' + Padr(toStr(Players[CurrentPlayer].Integers[68])+'/'+ToStr((3600 * (Players[I].Integers[68])) div (GetTimeRunning div 1000 + 1)),12) +
+      '| ' + Padr(ToStr(Players[I].Integers[69])+'/'+ToStr((3600 * (Players[I].Integers[69])) div (GetTimeRunning div 1000 + 1) * HowManyPlayers),12) +
+      '| ' + Padr(toStr(Players[CurrentPlayer].Integers[68])+'/'+ToStr((3600 * (Players[I].Integers[68])) div (GetTimeRunning div 1000 + 1) * HowManyPlayers),12) +
       '| ' + Players[I].Rand);
 
   WriteLn('<! Total anti-ban procedures run: '+ inttostr(AntiBansGlobal));
@@ -1090,6 +1234,7 @@ begin
   Reincarnate := True;
   DeclarePlayers;
   SetUpReflectionEx(True);
+  LampSkill := 'woodcutting';
 
   if (SRLStats_Username = '') then
     SetupSRLStats(68, 'Anonymous', 'anon1337')
@@ -1114,6 +1259,7 @@ end;
 
 procedure MainLoop;
 begin
+  CurrentPlayer := RandomPlayerIndex;
   LogInPlayer;
 
   repeat
@@ -1135,7 +1281,7 @@ begin
       LeaveLobby;
 
     WriteLn('Detected as logged out, NPlayer');
-    NextPlayer(Players[CurrentPlayer].Active);
+    NPH(Players[CurrentPlayer].Active);
   until False;
 end;
 
