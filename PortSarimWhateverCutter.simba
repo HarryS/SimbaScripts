@@ -1265,7 +1265,6 @@ begin
   Reincarnate := True;
   DeclarePlayers;
   SetUpReflectionEx(True);
-  r_randomkill := true;
   LampSkill := 'woodcutting';
 
   if (SRLStats_Username = '') then
