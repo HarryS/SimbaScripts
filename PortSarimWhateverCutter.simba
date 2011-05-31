@@ -1,6 +1,6 @@
 {///////////////////////////////////////////////////////////////////////////////
 //                                                                            //
-//                   Harry's Port Sarim Whatever Cutter v1.0                  //
+//                   Harry's Port Sarim Whatever Cutter v1.1                  //
 //                                                                            //
 //   Requirements:                                                            //
 //     Level 1+ woodcutting, axe wielded or in first inventory slot.          //
@@ -43,6 +43,7 @@
 //    0.9 - Grab an axe from Bob if you don't have one.                       //
 //            Random nextplayer, level goals, and numerous other tweaks.      //
 //    1.0 - Complete rework of tree location detection (thanks Drags111!)     //
+//    1.1 - Small but important fix on oak and yew tree finding.              //
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
@@ -78,7 +79,7 @@ begin
     Member      := False;
     Active      := True;
   end;
-
+  
 end;
 
 const
@@ -120,7 +121,7 @@ const
 ////////////////////////////////////////////////////////////////////////////////
 
   SCRIPT_NAME        = 'Port Sarim Whatever Cutter';
-  SCRIPT_VERSION     = '1.0';
+  SCRIPT_VERSION     = '1.1';
 
 var PlayerSessionTime,ReportTimer,AntiBansGlobal, WillowsCutGlobal, BirdieGlobal,
      WorldLeaveMarker,WorldsHopped, DethWelks, StatsTimer, AtkFasf, notcooldood,
@@ -786,7 +787,11 @@ begin
   if Players[CurrentPlayer].Strings[7] <> 'yew' then
     Exit;
   if (DistanceFrom(Tile(3048,3270)) < 1) then
+  begin
+    if Random(3) = 0 then
+      Antiban_Short;
     Exit;
+  end;
   if Moving or R_FlagExists then
     Exit;
   J := TileToMS(Tile(3048,3270), 300);
@@ -932,7 +937,7 @@ begin
       end;
     end;
     Result := False;
-    P := TileToMSEx(Weidenbaum.Tile,0.5,0.5,300);
+    P := TileToMSEx(Weidenbaum.RealTile,0.5,0.5,300);
     if not r_TileOnMSH(P.X,P.Y) then
     begin
       if DebugMe then WriteLn('Tree probably offscreen.');
@@ -987,7 +992,7 @@ begin
         MMouse(P.X-4, P.Y, 10, 17);
       'yew':
       if not R_IsUpText('own Yew') then
-        MMouse(P.X-3, P.Y-15, 10, 17);
+        MMouse(P.X-4, P.Y-4, 10, 17);
     end;
     Wait(1+Random(5));
     GetMousePos(lx,ly);
@@ -1039,14 +1044,7 @@ begin
       Inc(notcooldood);
       MakeCompass('N');
       SetAngle(True);
-      if (DistanceFrom(Weidenbaum.Tile) < 30) then
-        if not Moving then
-        begin
-          r_WebWalkH(Weidenbaum.Tile);
-          FFlag(3);
-          Exit;
-        end;
-      if notcooldood > 1 then
+      if notcooldood > 3 then
         if TabExists(Tab_Magic) then
         begin
           WriteLn('We have the power to teleabort!');
@@ -1063,6 +1061,13 @@ begin
           Players[CurrentPlayer].Rand := 'FUBAR90x';
           Logout;
           NPH(False);
+          Exit;
+        end;
+      if (DistanceFrom(Weidenbaum.Tile) < 30) then
+        if not Moving then
+        begin
+          r_WebWalkH(Weidenbaum.Tile);
+          FFlag(3);
           Exit;
         end;
     end;
