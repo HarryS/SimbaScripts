@@ -1,13 +1,13 @@
 {///////////////////////////////////////////////////////////////////////////////
 //                                                                            //
-//                   Harry's Port Sarim Whatever Cutter v0.9                  //
+//                   Harry's Port Sarim Whatever Cutter v1.0                  //
 //                                                                            //
 //   Requirements:                                                            //
 //     Level 1+ woodcutting, axe wielded or in first inventory slot.          //
-//     Start anywhere, but PortSarim is best (http://i.imgur.com/EtIOp.png)   //
+//     Start anywhere, but Port Sarim is best (http://i.imgur.com/EtIOp.png)  //
 //     It is best to be wielding your axe, but not required. Keep in slot 1.  //
 //     Edit the consts below (DeclarePlayers, basic setup.)                   //
-//     Latest Simba with latest SRL and Reflection.                           //
+//     Latest Simba with latest SRL and Reflection. (http://villavu.com)      //
 //                                                                            //
 //   Features:                                                                //
 //     Cuts: trees (levels 1-14), oaks (levels 15-29), willows (levels 30-99) //
@@ -42,6 +42,7 @@
 //    0.8 - Drastically improved Yew switching speed.                         //
 //    0.9 - Grab an axe from Bob if you don't have one.                       //
 //            Random nextplayer, level goals, and numerous other tweaks.      //
+//    1.0 - Complete rework of tree location detection (thanks Drags111!)     //
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
@@ -119,7 +120,7 @@ const
 ////////////////////////////////////////////////////////////////////////////////
 
   SCRIPT_NAME        = 'Port Sarim Whatever Cutter';
-  SCRIPT_VERSION     = '0.9';
+  SCRIPT_VERSION     = '1.0';
 
 var PlayerSessionTime,ReportTimer,AntiBansGlobal, WillowsCutGlobal, BirdieGlobal,
      WorldLeaveMarker,WorldsHopped, DethWelks, StatsTimer, AtkFasf, notcooldood,
@@ -706,27 +707,6 @@ begin
     Result := True;
 end;
 
-function GetObjectByIDH(IDs: TIntegerArray; objType, MaxDist: Integer): TRSObject;
-var
-   f: Integer;
-   TP: TTile;
-   TileObject: TRSObject;
-   TPA: TPointArray;
-begin
-  TP := GetMyPos;
-  TPA := SortedCircleTPA(TileToPoint(TP), MaxDist);
-  if length(TPA) < 1 then Exit;
-  for f := 0 to High(TPA) do
-  begin
-    TileObject := GetObjectAt(Tile(TPA[f].x, TPA[f].y), objType);
-    if (not (TileObject = NULL_RSOBJECT) and InIntArray(IDs, TileObject.ID)) and TileOnMSEx(TileObject.Realtile,0.5,0.5,300) then
-    begin
-      Result := TileObject;
-      Exit;
-    end;
-  end;
-end;
-
 procedure BirdieNest;
 var
   Items: TGroundItemArray;
@@ -743,12 +723,8 @@ begin
   if GetArrayLength(Items) > 0 then
   begin
     for iPad := 0 to high(items) do // Make this more efficient later.
-      if (items[iPad].ID = 5070) or (items[iPad].ID = 5071) or
-        (items[iPad].ID = 5072) or (items[iPad].ID = 5073) or
-        (items[iPad].ID = 5074) or (items[iPad].ID = 5075) or
-        (items[iPad].ID = 5076) or (items[iPad].ID = 5077) or
-        (items[iPad].ID = 5078) or (items[iPad].ID = 7413) or
-        (items[iPad].ID = 11966) then
+      case items[iPad].ID of
+      5070, 5071, 5072, 5073, 5074, 5075, 5076, 5077, 5078, 7413, 11966:
       begin
         TempMS := TileToMSEx(Items[iPad].Tile, 0.5, 0.5, 0);
         Mouse(TempMS.X, TempMS.Y, 5, 5, false);
@@ -763,6 +739,7 @@ begin
         R_FFlag(0);
         Wait(500+Random(2000));
       end;
+    end;
   end;
 end;
 
@@ -810,7 +787,7 @@ begin
     Exit;
   if (DistanceFrom(Tile(3048,3270)) < 1) then
     Exit;
-  if Moving then
+  if Moving or R_FlagExists then
     Exit;
   J := TileToMS(Tile(3048,3270), 300);
   if r_TileOnMSH(J.X,J.Y) then
@@ -821,6 +798,7 @@ begin
     begin
       GetMousePos(tx,ty);
       Mouse(tx,ty,0,0,True);
+      Wait(10+Random(300));
     end else
     begin
       GetMousePos(tx,ty);
@@ -836,7 +814,8 @@ function FindVictim: Boolean;
 var
   Weidenbaum,curstump: TRSObject;
   P, curtile: TPoint;
-  srch,KillFailsafe,lx,ly,PreWalk,SoRandum: integer;
+  srch,KillFailsafe,lx,ly,PreWalk,SoRandum,tti: integer;
+  Baeume: TPointArray;
 begin
   Result := False;
   if not LoggedIn or LobbyScreen then
@@ -887,29 +866,83 @@ begin
 
   for srch := 0 to 3 do // if reflection misclicks tree so it won't wait 2 seconds
   begin
-    //case Players[CurrentPlayer].Strings[7] of
-    //  'normal': Weidenbaum := GetObjectByIDH([1276,1277,1278,1280], OBJECT_TYPE_INTERACTABLE, 15);
-    //  'oak': Weidenbaum := GetObjectByIDH([1281], OBJECT_TYPE_INTERACTABLE, 15);
-    //  else Weidenbaum := GetObjectByIDH([5551,5552,5553], OBJECT_TYPE_INTERACTABLE, 15); // Willow
-    //end;
     case Players[CurrentPlayer].Strings[7] of
-      'normal': Weidenbaum := GetObjectByIDH([38782,38783,38785,38786,38787], OBJECT_TYPE_INTERACTABLE, 15);
-      'oak': Weidenbaum := GetObjectByIDH([38731,38732], OBJECT_TYPE_INTERACTABLE, 15);
-      'willow': Weidenbaum := GetObjectByIDH([38616,38627], OBJECT_TYPE_INTERACTABLE, 15);
-      'yew': Weidenbaum := GetObjectByIDH([38755], OBJECT_TYPE_INTERACTABLE, 40);
+      'normal':
+        Baeume := [Tile(3010, 3274), Tile(3011, 3266), Tile(3014, 3273),
+          Tile(3018, 3271), Tile(3019, 3267), Tile(3023, 3279),
+          Tile(3027, 3271), Tile(3029, 3275), Tile(3030, 3281),
+          Tile(3031, 3266), Tile(3034, 3263), Tile(3036, 3266),
+          Tile(3038, 3274), Tile(3046, 3263), Tile(3046, 3268),
+          Tile(3046, 3272), Tile(3051, 3262), Tile(3051, 3266),
+          Tile(3058, 3267), Tile(3058, 3279), Tile(3067, 3279)];
+      'oak':
+        Baeume := [Tile(3018, 3279), Tile(3018, 3280), Tile(3018, 3281),
+          Tile(3019, 3279), Tile(3019, 3280), Tile(3019, 3281),
+          Tile(3020, 3279), Tile(3020, 3280), Tile(3020, 3281),
+          Tile(3021, 3271), Tile(3021, 3272), Tile(3021, 3273),
+          Tile(3022, 3271), Tile(3022, 3272), Tile(3022, 3273),
+          Tile(3023, 3271), Tile(3023, 3272), Tile(3023, 3273),
+          Tile(3033, 3270), Tile(3033, 3271), Tile(3033, 3272),
+          Tile(3034, 3270), Tile(3034, 3271), Tile(3034, 3272),
+          Tile(3035, 3270), Tile(3035, 3271), Tile(3035, 3272),
+          Tile(3036, 3258), Tile(3036, 3259), Tile(3036, 3260),
+          Tile(3037, 3258), Tile(3037, 3259), Tile(3037, 3260),
+          Tile(3038, 3258), Tile(3038, 3259), Tile(3038, 3260),
+          Tile(3038, 3278), Tile(3038, 3279), Tile(3038, 3280),
+          Tile(3039, 3278), Tile(3039, 3279), Tile(3039, 3280),
+          Tile(3040, 3263), Tile(3040, 3264), Tile(3040, 3265),
+          Tile(3040, 3278), Tile(3040, 3279), Tile(3040, 3280),
+          Tile(3041, 3263), Tile(3041, 3264), Tile(3041, 3265),
+          Tile(3042, 3263), Tile(3042, 3264), Tile(3042, 3265),
+          Tile(3056, 3261), Tile(3056, 3262), Tile(3056, 3263),
+          Tile(3057, 3261), Tile(3057, 3262), Tile(3057, 3263),
+          Tile(3058, 3261), Tile(3058, 3262), Tile(3058, 3263),
+          Tile(3058, 3271), Tile(3058, 3272), Tile(3058, 3273),
+          Tile(3059, 3271), Tile(3059, 3272), Tile(3059, 3273),
+          Tile(3060, 3271), Tile(3060, 3272), Tile(3060, 3273)];
+      'willow':
+        Baeume := [Tile(3058, 3251), Tile(3062, 3253), Tile(3062, 3263), Tile(3065, 3258)];
+      'yew':
+        Baeume := [Tile(3041, 3270), Tile(3041, 3271), Tile(3041, 3272),
+          Tile(3042, 3270), Tile(3042, 3271), Tile(3042, 3272),
+          Tile(3043, 3270), Tile(3043, 3271), Tile(3043, 3272),
+          Tile(3053, 3269), Tile(3053, 3270), Tile(3053, 3271),
+          Tile(3054, 3270), Tile(3054, 3271), Tile(3055, 3269),
+          Tile(3055, 3270), Tile(3055, 3271)];
     end;
-    //P := TileToMSEx(Weidenbaum.Realtile,-0.3,0.6,300);
-    P := TileToMSEx(Weidenbaum.Realtile,0.5,0.5,300);
+
+    SortTPAFrom(Baeume, GetMyPos);
+    for tti := 0 to High(Baeume) do
+    begin
+      Weidenbaum := GetInteractableAt(Baeume[tti]);
+      case Weidenbaum.ID of
+        38782,38783,38785,38786,38787: Result := True; // Normals
+        38731,38732: Result := True; // Oaks
+        38616,38627: Result := True; // Willows
+        38755: Result := True; // Yews
+      else
+        Result := False;
+      end;
+      if Result then
+        Break;
+      if (tti = High(Baeume)) and not Result then
+      begin
+        YewRelocate;
+        Exit;
+      end;
+    end;
+    Result := False;
+    P := TileToMSEx(Weidenbaum.Tile,0.5,0.5,300);
     if not r_TileOnMSH(P.X,P.Y) then
     begin
       if DebugMe then WriteLn('Tree probably offscreen.');
-      Wait(10+Random(50));
-      if (DistanceFrom(Weidenbaum.Tile) < 40) then
-        if not Moving then
-        begin
-          r_WebWalkH(Weidenbaum.Tile);
-          Exit;
-        end;
+      Wait(1+Random(50));
+      if (DistanceFrom(Weidenbaum.Tile) < 50) then
+      begin
+        r_WebWalkH(Weidenbaum.Tile);
+        R_FFlag(3);
+        Exit;
+      end;
       case Players[CurrentPlayer].Strings[7] of
         'normal','oak':
         begin
@@ -919,6 +952,7 @@ begin
         end;
         'willow':
         begin
+          writeln('walking blind');
           R_WebWalkH(Tile(3060, 3254));
           FFlag(1);
           Exit;
@@ -953,17 +987,17 @@ begin
         MMouse(P.X-4, P.Y, 10, 17);
       'yew':
       if not R_IsUpText('own Yew') then
-        MMouse(P.X-4, P.Y, 10, 17);
+        MMouse(P.X-3, P.Y-15, 10, 17);
     end;
-    GetMousePos(lx,ly);
     Wait(1+Random(5));
+    GetMousePos(lx,ly);
     case Players[CurrentPlayer].Strings[7] of
       'normal':
       if R_IsUpText('own Tree') then
       begin
         Mouse(lx,ly,0,0,True);
         curtile := Weidenbaum.Tile;
-        Result := r_WaitCrossHairColor(CROSSHAIR_RED, 500+Random(100)-Random(100));
+        Result := r_WaitCrossHairColor(CROSSHAIR_RED, 600+Random(100)-Random(100));
         if Result then
           AtkFasf := 0;
       end;
@@ -972,7 +1006,7 @@ begin
       begin
         Mouse(lx,ly,0,0,True);
         curtile := Weidenbaum.Tile;
-        Result := r_WaitCrossHairColor(CROSSHAIR_RED, 500+Random(100)-Random(100));
+        Result := r_WaitCrossHairColor(CROSSHAIR_RED, 600+Random(100)-Random(100));
         if Result then
           AtkFasf := 0;
       end;
@@ -981,7 +1015,7 @@ begin
       begin
         Mouse(lx,ly,0,0,True);
         curtile := Weidenbaum.Tile;
-        Result := r_WaitCrossHairColor(CROSSHAIR_RED, 500+Random(100)-Random(100));
+        Result := r_WaitCrossHairColor(CROSSHAIR_RED, 600+Random(100)-Random(100));
         if Result then
           AtkFasf := 0;
       end;
@@ -990,7 +1024,7 @@ begin
       begin
         Mouse(lx,ly,0,0,True);
         curtile := Weidenbaum.Tile;
-        Result := r_WaitCrossHairColor(CROSSHAIR_RED, 500+Random(100)-Random(100));
+        Result := r_WaitCrossHairColor(CROSSHAIR_RED, 600+Random(100)-Random(100));
         if Result then
           AtkFasf := 0;
       end;
@@ -1005,7 +1039,7 @@ begin
       Inc(notcooldood);
       MakeCompass('N');
       SetAngle(True);
-      if (DistanceFrom(Weidenbaum.Tile) < 25) then
+      if (DistanceFrom(Weidenbaum.Tile) < 30) then
         if not Moving then
         begin
           r_WebWalkH(Weidenbaum.Tile);
@@ -1038,8 +1072,6 @@ begin
       AtkFasf := 0;
       notcooldood := 0;
       MarkTime(ProperLog);
-      if (R_FlagExists) then
-        R_Flag;
       MarkTime(KillFailsafe);
       SoRandum := 300000 + Random(280000) - Random(280000);
       repeat
@@ -1049,28 +1081,27 @@ begin
         AntiBan_Short;
         BirdieNest;
         curstump := GetObjectAt(curtile,OBJECT_TYPE_INTERACTABLE);
-        //if (curstump.ID = 5554) or (curstump.ID = 1342) or (curstump.ID = 1356) then // Thanks Emaziz!
-        case curstump.ID of // Yew, Willow, Oak, Normal
+        case curstump.ID of
           38759, // Yew
           38725, // Willow
           38754,38741, // Oak
           40351,40352,40354,40355,40356: // Normal
           begin
             if DebugMe then WriteLn('Stumped!');
-            if not hInvFull then
-              YewRelocate;
             Break;
           end;
         end;
         if not hInvFull then
           if ClickToContinue then
             CheckPowerLevels;
+        if R_FlagExists then
+          R_FFlag(0);
       until (not rInFight) or (TimeFromMark(KillFailsafe) > SoRandum) or (hInvFull); // 2 minutes
       if (not loggedIn) or LobbyScreen then Exit;
       if (TimeFromMark(KillFailsafe) > SoRandum) then
       begin
         writeLn('Took too long to cut tree, breaking out! ('+ToStr(SoRandum)+' ms)');
-        wait(3000+Random(10000));
+        wait(1000+Random(13000));
       end
       else
       begin
@@ -1104,7 +1135,7 @@ begin
   QC[1] := [TimeRunning,
     ToStr(PlayersActive) + ' out of ' + ToStr(HowManyPlayers),
     ToStr(WillowsCutGlobal),
-    ToStr((3600 * (WillowsCutGlobal)) div (GetTimeRunning div 1000 + 1) * HowManyPlayers)];
+    ToStr((3600 * (WillowsCutGlobal)) div (GetTimeRunning div 1000 + 1))];
 
   WriteLn('<!---');
   WriteLn('<! ' + Padr('Harry''s ' + SCRIPT_NAME, 35) + 'v' + SCRIPT_VERSION);
@@ -1122,8 +1153,8 @@ begin
       '| ' + Padr(Copy(Players[I].Nick, 1, 4),                     5) +
       '| ' + Padr(ToStr(Players[I].Active)[1],                     2) +
       '| ' + Padr(ToStr(Players[I].Integers[42]), 4) +
-      '| ' + Padr(ToStr(Players[I].Integers[69])+'/'+ToStr((3600 * (Players[I].Integers[69])) div (GetTimeRunning div 1000 + 1) * HowManyPlayers),12) +
-      '| ' + Padr(toStr(Players[CurrentPlayer].Integers[68])+'/'+ToStr((3600 * (Players[I].Integers[68])) div (GetTimeRunning div 1000 + 1) * HowManyPlayers),12) +
+      '| ' + Padr(ToStr(Players[I].Integers[69])+'/'+ToStr((3600 * (Players[I].Integers[69])) div (GetTimeRunning div 1000 + 1)),12) +
+      '| ' + Padr(toStr(Players[CurrentPlayer].Integers[68])+'/'+ToStr((3600 * (Players[I].Integers[68])) div (GetTimeRunning div 1000 + 1)),12) +
       '| ' + Players[I].Rand);
 
   WriteLn('<! Total anti-ban procedures run: '+ inttostr(AntiBansGlobal));
@@ -1234,6 +1265,7 @@ begin
   Reincarnate := True;
   DeclarePlayers;
   SetUpReflectionEx(True);
+  r_randomkill := true;
   LampSkill := 'woodcutting';
 
   if (SRLStats_Username = '') then
@@ -1252,6 +1284,7 @@ begin
     Players[i].Integers[4] := 1;
   end;
 
+  CurrentPlayer := RandomPlayerIndex;
   ActivateClient;
   MarkTime(ProperLog);
   Wait(1000 + Random(2000));
