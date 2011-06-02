@@ -1,6 +1,6 @@
 {///////////////////////////////////////////////////////////////////////////////
 //                                                                            //
-//                   Harry's Port Sarim Whatever Cutter v1.1                  //
+//                   Harry's Port Sarim Whatever Cutter v1.2                  //
 //                                                                            //
 //   Requirements:                                                            //
 //     Level 1+ woodcutting, axe wielded or in first inventory slot.          //
@@ -11,7 +11,7 @@
 //                                                                            //
 //   Features:                                                                //
 //     Cuts: trees (levels 1-14), oaks (levels 15-29), willows (levels 30-99) //
-//             and banks them at the deposit box a few clicks to the south.   //
+//             OR yews (60-99), banks them at the deposit box to the south.   //
 //     Picks up birds-nests if you are a RS Member.                           //
 //     In the rare chance you die, will death-walk back to Port Sarim.        //
 //       You will probably die more often if you are a lvl-3, so go level cb! //
@@ -44,6 +44,7 @@
 //            Random nextplayer, level goals, and numerous other tweaks.      //
 //    1.0 - Complete rework of tree location detection (thanks Drags111!)     //
 //    1.1 - Small but important fix on oak and yew tree finding.              //
+//    1.2 - Yew relocation improved; a ton more humanlike. Other tiny tweaks. //
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
@@ -121,11 +122,11 @@ const
 ////////////////////////////////////////////////////////////////////////////////
 
   SCRIPT_NAME        = 'Port Sarim Whatever Cutter';
-  SCRIPT_VERSION     = '1.1';
+  SCRIPT_VERSION     = '1.2';
 
 var PlayerSessionTime,ReportTimer,AntiBansGlobal, WillowsCutGlobal, BirdieGlobal,
      WorldLeaveMarker,WorldsHopped, DethWelks, StatsTimer, AtkFasf, notcooldood,
-     PowerTmp, ProperLog : integer;
+     PowerTmp, ProperLog, curyew : integer;
 
 Function r_WebWalkH(T: TTile): Boolean; // JuKKa
 Var
@@ -318,11 +319,19 @@ begin
       Exit;
     end else
     begin
-      writeLn('Reflection tiles say you''re not near the Port and logged in.');
-      writeLn('In random or broken; logging out for your saftey - nextplayer false.');
-      Players[CurrentPlayer].Rand := 'PlayerLost1';
-      NPH(False);
-      Exit;
+      if (GetColor(339, 25) = 12378347) and (GetColor(201, 25) = 12378347) then
+      begin
+        WriteLn('You probably died; so sad... relogging in a bit.');
+        NPH(True);
+        Exit;
+      end else
+      begin
+        writeLn('Reflection tiles say you''re not near the Port and logged in.');
+        writeLn('In random or broken; logging out for your saftey - nextplayer false.');
+        Players[CurrentPlayer].Rand := 'PlayerLost1';
+        NPH(False);
+        Exit;
+      end;
     end;
   end;
 end;
@@ -588,7 +597,12 @@ begin
     case Players[CurrentPlayer].Strings[7] of
       'normal','oak': R_WebWalkH(Tile(3037, 3270));
       'willow': R_WebWalkH(Tile(3060, 3254));
-      'yew': R_WebWalkH(Tile(3048, 3270));
+      'yew':
+        case curyew of
+          0: R_WebWalkH(Tile(3048-Random(2)+Random(2),3270-Random(2)+Random(2)));
+          1: R_WebWalkH(Tile(3042-Random(2)+Random(2), 3270-Random(2)+Random(2)));
+          2: R_WebWalkH(Tile(3054-Random(2)+Random(2), 3270-Random(2)+Random(2)));
+        end;
     end;
     //r_FFlag(8);
     Exit;
@@ -786,33 +800,103 @@ var J: TPoint; tx,ty: integer;
 begin
   if Players[CurrentPlayer].Strings[7] <> 'yew' then
     Exit;
-  if (DistanceFrom(Tile(3048,3270)) < 1) then
-  begin
-    if Random(3) = 0 then
-      Antiban_Short;
-    Exit;
-  end;
+
   if Moving or R_FlagExists then
     Exit;
-  J := TileToMS(Tile(3048,3270), 300);
-  if r_TileOnMSH(J.X,J.Y) then
+
+  if curyew = 0 then // nice place to see both trees at once.
   begin
-    MMouse(J.X-Random(20)+Random(20),J.Y-Random(20)+Random(20),0,0);
-    Wait(10+Random(200));
-    if r_IsUpText('alk here') then
+    if (DistanceFrom(Tile(3048,3270)) < 3) then
     begin
-      GetMousePos(tx,ty);
-      Mouse(tx,ty,0,0,True);
-      Wait(10+Random(300));
-    end else
-    begin
-      GetMousePos(tx,ty);
-      Mouse(tx,ty,0,0,False);
-      Wait(10+Random(200));
-      r_ChooseOption('alk here');
+      if Random(3) = 0 then
+        Antiban_Short;
+      Exit;
     end;
+    if (DistanceFrom(Tile(3048,3270)) > 50) then
+      Exit;
+    J := TileToMS(Tile(3048,3270), 300);
+    if r_TileOnMSH(J.X,J.Y) then
+    begin
+      MMouse(J.X-Random(20)+Random(20),J.Y-Random(20)+Random(20),0,0);
+      Wait(10+Random(200));
+      if r_IsUpText('alk here') then
+      begin
+        GetMousePos(tx,ty);
+        Mouse(tx,ty,0,0,True);
+        Wait(10+Random(300));
+      end else
+      begin
+        GetMousePos(tx,ty);
+        Mouse(tx,ty,0,0,False);
+        Wait(10+Random(200));
+        r_ChooseOption('alk here');
+      end;
     end else
-      R_WebWalkH(Tile(3048,3270)); // nice place to see both trees at once.
+      R_WebWalkH(Tile(3048-Random(2)+Random(2),3270-Random(2)+Random(2)));
+  end;
+
+  if curyew = 1 then // left tree
+  begin
+    if (DistanceFrom(Tile(3042, 3270)) < 4) then
+    begin
+      if Random(3) = 0 then
+        Antiban_Short;
+      Exit;
+    end;
+    if (DistanceFrom(Tile(3042, 3270)) > 50) then
+      Exit;
+    J := TileToMS(Tile(3042, 3270), 300);
+    if r_TileOnMSH(J.X,J.Y) then
+    begin
+      MMouse(J.X-Random(50)+Random(90),J.Y-Random(50)+Random(90),0,0);
+      Wait(10+Random(100));
+      if r_IsUpText('alk here') or r_IsUpText('own Yew') then
+      begin
+        GetMousePos(tx,ty);
+        Mouse(tx,ty,0,0,True);
+        Wait(10+Random(300));
+      end else
+      begin
+        GetMousePos(tx,ty);
+        Mouse(tx,ty,0,0,False);
+        Wait(10+Random(200));
+        r_ChooseOption('alk here');
+      end;
+    end else
+      R_WebWalkH(Tile(3042-Random(2)+Random(2), 3270-Random(2)+Random(2)));
+  end;
+
+  if curyew = 2 then // right tree
+  begin
+    if (DistanceFrom(Tile(3054, 3270)) < 4) then
+    begin
+      if Random(3) = 0 then
+        Antiban_Short;
+      Exit;
+    end;
+    if (DistanceFrom(Tile(3054, 3270)) > 50) then
+      Exit;
+    J := TileToMS(Tile(3054, 3270), 300);
+    if r_TileOnMSH(J.X,J.Y) then
+    begin
+      MMouse(J.X-Random(50)+Random(90),J.Y-Random(50)+Random(90),0,0);
+      Wait(10+Random(100));
+      if r_IsUpText('alk here') or r_IsUpText('own Yew') then
+      begin
+        GetMousePos(tx,ty);
+        Mouse(tx,ty,0,0,True);
+        Wait(10+Random(300));
+      end else
+      begin
+        GetMousePos(tx,ty);
+        Mouse(tx,ty,0,0,False);
+        Wait(10+Random(200));
+        r_ChooseOption('alk here');
+      end;
+    end else
+      R_WebWalkH(Tile(3054-Random(2)+Random(2), 3270-Random(2)+Random(2)));
+  end;
+
 end;
 
 function FindVictim: Boolean;
@@ -992,7 +1076,7 @@ begin
         MMouse(P.X-4, P.Y, 10, 17);
       'yew':
       if not R_IsUpText('own Yew') then
-        MMouse(P.X-4, P.Y-4, 10, 17);
+        MMouse(P.X-2, P.Y-1, 10, 17);
     end;
     Wait(1+Random(5));
     GetMousePos(lx,ly);
@@ -1029,6 +1113,13 @@ begin
       begin
         Mouse(lx,ly,0,0,True);
         curtile := Weidenbaum.Tile;
+        if (DistanceTile(Tile(3042, 3270),Weidenbaum.Tile) < 6) then // right tree
+          curyew := 1
+        else
+          if (DistanceTile(Tile(3054, 3270),Weidenbaum.Tile) < 6) then // left tree
+            curyew := 2
+          else
+            curyew := 0; // dunno which tree!
         Result := r_WaitCrossHairColor(CROSSHAIR_RED, 600+Random(100)-Random(100));
         if Result then
           AtkFasf := 0;
@@ -1111,10 +1202,19 @@ begin
       else
       begin
         if DebugMe then WriteLn('TREE HAS BEEN CHOPPED');
+        if curyew = 1 then curyew := 2 else curyew := 1;
         Wait(1);
       end;
       if hInvFull then
+      begin
+        if curstump.ID <> 38759 then
+          if curyew = 1 then
+            curyew := 2
+          else
+            if curyew <> 0 then
+              curyew := 1; // if you're not alone at the tree, chances are it was chopped when you were banking
         BankinDat('YOOOOOOO');
+      end;
       Exit;
     end;
   end;
@@ -1206,6 +1306,13 @@ begin
   //Writeln(tostr(worldleavemarker));
   SetAngle(True);
   SetRun(True);
+  if (GetColor(433, 499) = 65280) then // assist off
+  begin
+    MouseBox(412, 485, 452, 497, 2);
+    Wait(10+Random(100));
+    R_ChooseOption('Off');
+  end;
+  curyew := 0;
 end;
 
 procedure Autoupdateme;
@@ -1301,7 +1408,7 @@ begin
 
   repeat
     repeat
-      if (TimeFromMark(ReportTimer) > 60000) then // 1 minute
+      if (TimeFromMark(ReportTimer) > 180000) then // 3 minutes
       begin
         PrintReports;
         MarkTime(ReportTimer);
@@ -1310,7 +1417,8 @@ begin
       FindVictim;
       if (not LoggedIn) or LobbyScreen then
       begin
-        Wait(5000+Random(5000));
+        writeln('Not logged in?');
+        Wait(1000+Random(1000));
         if (not LoggedIn) or LobbyScreen then Break else Wait(1);
       end;
     until(False);
