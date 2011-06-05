@@ -1,18 +1,18 @@
 {///////////////////////////////////////////////////////////////////////////////
 //                                                                            //
-//                   Harry's Port Sarim Whatever Cutter v1.2                  //
+//                   Harry's Port Sarim Whatever Cutter v1.3                  //
 //                                                                            //
 //   Requirements:                                                            //
 //     Level 1+ woodcutting, axe wielded or in first inventory slot.          //
 //     Start anywhere, but Port Sarim is best (http://i.imgur.com/EtIOp.png)  //
 //     It is best to be wielding your axe, but not required. Keep in slot 1.  //
-//     Edit the consts below (DeclarePlayers, basic setup.)                   //
+//     Edit the consts below (DeclarePlayers, consts, basic setup.)           //
 //     Latest Simba with latest SRL and Reflection. (http://villavu.com)      //
 //                                                                            //
 //   Features:                                                                //
 //     Cuts: trees (levels 1-14), oaks (levels 15-29), willows (levels 30-99) //
-//             OR yews (60-99), banks them at the deposit box to the south.   //
-//     Picks up birds-nests if you are a RS Member.                           //
+//             OR yews (60-99). Banks them at the deposit box to the south.   //
+//     Picks up birds-nests, dropped yew logs, and rune hatchets.             //
 //     In the rare chance you die, will death-walk back to Port Sarim.        //
 //       You will probably die more often if you are a lvl-3, so go level cb! //
 //     Grabs an axe from Bob in Lumbridge if you do not have one.             //
@@ -25,7 +25,6 @@
 //     And much more!                                                         //
 //                                                                            //
 //   Future features (not yet added):                                         //
-//     "Looting" other bot's dropped logs - not worth it I think.             //
 //     Suggest something on the forums!                                       //
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
@@ -45,6 +44,9 @@
 //    1.0 - Complete rework of tree location detection (thanks Drags111!)     //
 //    1.1 - Small but important fix on oak and yew tree finding.              //
 //    1.2 - Yew relocation improved; a ton more humanlike. Other tiny tweaks. //
+//    1.3 - Banking made more efficient for those with an axe in their inv.   //
+//            Looting of Yew logs that other bots dropped/died with.          //
+//            Removal of possible but improbable infinite loop.               //
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
@@ -91,6 +93,7 @@ const
   WORLD_LEAVE = True; // Hop words every ~25 minutes or so. WORLD_SWITCH must be true.
   DoYews  = False; // Chop Yews? (Not suggested due to them being such slow exp)
   YewAt   = 60;  // What level to begin Yew cutting at. DoYews must be true for this to activate.
+  GrabItems = True; // Grab expensive items if found on ground.
   WCGoal = 99; // Stop player at this woodcutting level.
   AxeGrab = True; // Grab a bronze axe for free from Bob @ lumbridge, if your current axe gets lost.
   RandomNP = True; // Random NextPlayer (chooses random player to run next if using multiplayer).
@@ -122,7 +125,7 @@ const
 ////////////////////////////////////////////////////////////////////////////////
 
   SCRIPT_NAME        = 'Port Sarim Whatever Cutter';
-  SCRIPT_VERSION     = '1.2';
+  SCRIPT_VERSION     = '1.3';
 
 var PlayerSessionTime,ReportTimer,AntiBansGlobal, WillowsCutGlobal, BirdieGlobal,
      WorldLeaveMarker,WorldsHopped, DethWelks, StatsTimer, AtkFasf, notcooldood,
@@ -130,11 +133,12 @@ var PlayerSessionTime,ReportTimer,AntiBansGlobal, WillowsCutGlobal, BirdieGlobal
 
 Function r_WebWalkH(T: TTile): Boolean; // JuKKa
 Var
-  I: Integer;
+  I, Tm: Integer;
   M, P: TPoint;
   CTRLPoints: TPointArray;
 Begin
   P := TileToPoint(T);
+  Tm := (GetSystemTime + (5 * 60000));
   if DistanceFrom(P) < 2 then
   begin
     if DebugMe then WriteLn('Located close enough to tile, unable to webwalk!');
@@ -153,7 +157,7 @@ Begin
         Break;
       End;
     R_FindRandoms;
-  Until( Result );
+  Until(Result or (GetSystemTime > Tm));
 End;
 
 function r_TileOnMSH(moix,moiy: integer) : Boolean; // Drags111
@@ -170,7 +174,7 @@ begin
 end;
 
 function NotSafeZone: boolean;
-var wTile: TPoint; LagTries,ee: integer;
+var wTile: TPoint; LagTries,ee,movWait: integer;
 begin
   if (DistanceFrom(Tile(3045, 3246)) > 50) then // PS dock
   begin
@@ -194,15 +198,24 @@ begin
       begin
         WriteLn('Tile doesn''t exist, o noes! Might you be in lubmy?');
         Result := True;
-        if (DistanceFrom(Tile(3222,3219)) < 50) then
+        if (DistanceFrom(Tile(3222,3219)) < 50) and (GetPlaneIndex = 0) then
         begin
           WriteLn('You are in the Lubmy area. Let''s walk back to the bank.');
           // Deathwalk stuff.
           for ee := 1 to 3 do
             R_ClickItem(ee, True, '');
           Inc(DethWelks);
-          R_WebWalkH(Tile(3235, 3219)); // Lumby east int
+          R_WebWalkH(Tile(3238, 3219)); // Lumby east int
           r_FFlag(0);
+          MarkTime(movWait);
+          repeat
+            if (GetSpeed > 0) then
+              Wait(1+Random(50))
+            else
+              Break;
+            if (TimeFromMark(movWait) > 10000) then
+              Break;
+          until False;
           R_WebWalkH(Tile(3218, 3247)); // Lumby north gen store
           r_FFlag(5+Random(5)-Random(5));
           R_WebWalkH(Tile(3078, 3249)); // draynor bank
@@ -232,11 +245,20 @@ begin
           Cast('lumbridge home teleport', False);
           Wait(15000+Random(10000));
           WriteLn('(Probably) back in lumby via teleport!');
-          if (DistanceFrom(Tile(3222,3219)) < 50) then
+          if (DistanceFrom(Tile(3222,3219)) < 50) and (GetPlaneIndex = 0) then
           begin
             Inc(DethWelks);
-            R_WebWalkH(Tile(3235, 3219)); // Lumby east int
+            R_WebWalkH(Tile(3238, 3219)); // Lumby east int
             r_FFlag(0);
+            MarkTime(movWait);
+            repeat
+              if (GetSpeed > 0) then
+                Wait(1+Random(50))
+              else
+                Break;
+              if (TimeFromMark(movWait) > 10000) then
+                Break;
+            until False;
             R_WebWalkH(Tile(3218, 3247)); // Lumby north gen store
             r_FFlag(5+Random(5)-Random(5));
             R_WebWalkH(Tile(3078, 3249)); // draynor bank
@@ -295,7 +317,7 @@ begin
     Result := False;
     Exit;
   end;
-  Result := (InvCount = 28);
+  Result := (r_InvCount = 28);
 end;
 
 procedure HopelesslyLost;
@@ -465,13 +487,19 @@ begin
       B := DepositItemBox(I);
       if (not(FindColor(X, Y, srl_outline_black, B.X1, B.Y1, B.X2, B.Y2))) then
         Continue;
-      Mouse((B.X1 + B.X2) shr 1, (B.Y1 + B.Y2) shr 1, 0, 0, False);
+      Mouse((B.X1 + B.X2) shr 1, (B.Y1 + B.Y2) shr 1, 7, 7, False);
       WaitOptionMulti(['Deposit-All', 'Deposit'], 200);
       T := GetSystemTime;
       Wait(RandomRange(10, 600));
     end;
-    if not hInvFull then
-      Exit;
+    if not FindColor(X, Y, srl_outline_black, 153, 121, 429, 252) then
+    begin
+      Wait(10+Random(50));
+      if not FindColor(X, Y, srl_outline_black, 153, 121, 429, 252) then
+        Exit
+      else
+        WriteLn('Inv not empty yet.');
+    end;
     Wait(200+Random(2000));
   until(tti > 6);
 end;
@@ -482,7 +510,7 @@ begin
   if not AxeGrab then
   begin
     WriteLn('Bob Axe support disabled (AxeGrab=False). Bye bye!');
-    Players[CurrentPlayer].Loc := 'NewAxe1';
+    Players[CurrentPlayer].Loc := 'NeedNewAxe1';
     NPH(False);
     Exit;
   end;
@@ -494,7 +522,7 @@ begin
     Cast('lumbridge home teleport', False);
     Wait(15000+Random(10000));
     WriteLn('(Probably) back in lumby via teleport!');
-    if (DistanceFrom(Tile(3222,3219)) < 50) then
+    if (DistanceFrom(Tile(3222,3219)) < 50) and (GetPlaneIndex = 0) then
     begin
       if R_ItemSlotExists(1) then
       begin
@@ -722,18 +750,18 @@ begin
     Result := True;
 end;
 
-procedure BirdieNest;
+function BodenItems: boolean;
 var
   Items: TGroundItemArray;
   TempMS: TPoint;
   iPad: Integer;
 begin
-  if Players[CurrentPlayer].Member = False then
+  Result := False;
+  if not GrabItems then
     Exit;
   if not LoggedIn then
     Exit;
-  if Random(2) = 0 then // Don't need it every time.
-    Exit;
+
   Items := GetItemsNear(3);
   if GetArrayLength(Items) > 0 then
   begin
@@ -741,21 +769,55 @@ begin
       case items[iPad].ID of
       5070, 5071, 5072, 5073, 5074, 5075, 5076, 5077, 5078, 7413, 11966:
       begin
-        TempMS := TileToMSEx(Items[iPad].Tile, 0.5, 0.5, 0);
+        TempMS := TileToMSEx(Items[iPad].Tile, 0.5, 0.5, 100);
         Mouse(TempMS.X, TempMS.Y, 5, 5, false);
-        if R_WaitOption('Bird', 1000) then
+        if R_WaitOption('Bird', 500) then
         begin
           WriteLn('Got birds nest!');
           stats_IncVariable('Bird Nest',1);
           Inc(BirdieGlobal);
+          Result := True;
+          R_FFlag(0);
+          Wait(500+Random(2000));
         end
         else
           WriteLn('Failed to grab nest. sadfrog.');
-        R_FFlag(0);
-        Wait(500+Random(2000));
+      end;
+      1515:
+      begin
+        TempMS := TileToMSEx(Items[iPad].Tile, 0.5, 0.5, 100);
+        Mouse(TempMS.X, TempMS.Y, 5, 5, false);
+        if R_WaitOption('Take Yew', 500) then
+        begin
+          WriteLn('Got yew logs off ground!');
+          stats_IncVariable('Bird Nest',1);
+          Inc(BirdieGlobal);
+          Result := True;
+          R_FFlag(0);
+          Wait(100+Random(1000));
+        end
+        else
+          WriteLn('Failed to grab yew logs off ground. sadfrog.');
+      end;
+      1359:
+      begin
+        TempMS := TileToMSEx(Items[iPad].Tile, 0.5, 0.5, 100);
+        Mouse(TempMS.X, TempMS.Y, 5, 5, false);
+        if R_WaitOption('Take Rune', 500) then
+        begin
+          WriteLn('Got Rune hatchet off ground!');
+          stats_IncVariable('Bird Nest',1);
+          Inc(BirdieGlobal);
+          Result := True;
+          R_FFlag(0);
+          Wait(100+Random(1000));
+        end
+        else
+          WriteLn('Failed to grab Rune hatchet off ground. sadfrog.');
       end;
     end;
   end;
+  SetArrayLength(Items,0);
 end;
 
 procedure CheckPowerLevels;
@@ -947,7 +1009,7 @@ begin
 
   PreWalk := 0;
 
-  if (DistanceFrom(Tile(3222,3219)) < 50) then // Lumby
+  if (DistanceFrom(Tile(3222,3219)) < 50) and (GetPlaneIndex = 0) then // Lumby
   begin
     WriteLn('In Lumbridge!');
     Exit;
@@ -1142,7 +1204,7 @@ begin
           GameTab(Tab_Magic);
           Cast('lumbridge home teleport', False);
           Wait(15000+Random(10000));
-          if (DistanceFrom(Tile(3222,3219)) < 50) then
+          if (DistanceFrom(Tile(3222,3219)) < 50) and (GetPlaneIndex = 0) then
           begin
             WriteLn('Back at home Lumby.');
             notcooldood := 0;
@@ -1175,7 +1237,11 @@ begin
         Wait(10+Random(100));
         R_FindRandoms;
         AntiBan_Short;
-        BirdieNest;
+        if BodenItems then
+        begin
+          FindVictim;
+          Exit;
+        end;
         curstump := GetObjectAt(curtile,OBJECT_TYPE_INTERACTABLE);
         case curstump.ID of
           38759, // Yew
@@ -1259,7 +1325,7 @@ begin
       '| ' + Padr(ToStr(Players[I].Active)[1],                     2) +
       '| ' + Padr(ToStr(Players[I].Integers[42]), 4) +
       '| ' + Padr(ToStr(Players[I].Integers[69])+'/'+ToStr((3600 * (Players[I].Integers[69])) div (GetTimeRunning div 1000 + 1)),12) +
-      '| ' + Padr(toStr(Players[CurrentPlayer].Integers[68])+'/'+ToStr((3600 * (Players[I].Integers[68])) div (GetTimeRunning div 1000 + 1)),12) +
+      '| ' + Padr(toStr(Players[I].Integers[68])+'/'+ToStr((3600 * (Players[I].Integers[68])) div (GetTimeRunning div 1000 + 1)),12) +
       '| ' + Players[I].Rand);
 
   WriteLn('<! Total anti-ban procedures run: '+ inttostr(AntiBansGlobal));
@@ -1270,7 +1336,7 @@ begin
   if LoggedIn and not LobbyScreen then
     WriteLn('<! There are '+ToStr(Length(GetAllPlayers))+' fellow botters woodcutting with you!');
   if BirdieGlobal > 0 then
-    WriteLn('<! Bird Nests picked up: '+toStr(BirdieGlobal)+'.');
+    WriteLn('<! Items picked up: '+toStr(BirdieGlobal)+'.');
 
 
   if (TimeFromMark(StatsTimer) > 360000) then // 6 minutes.
@@ -1415,11 +1481,17 @@ begin
       end;
       HopelesslyLost;
       FindVictim;
-      if (not LoggedIn) or LobbyScreen then
+      if (not LoggedIn) then
       begin
-        writeln('Not logged in?');
-        Wait(1000+Random(1000));
-        if (not LoggedIn) or LobbyScreen then Break else Wait(1);
+        WriteLn('Not logged in?');
+        Wait(500+Random(1000));
+        if (not LoggedIn) then Break else Wait(1);
+      end;
+      if LobbyScreen then
+      begin
+        WriteLn('At lobby screen?');
+        Wait(500+Random(1000));
+        if (LobbyScreen) then Break else Wait(1);
       end;
     until(False);
     if LobbyScreen then
