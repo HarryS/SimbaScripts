@@ -494,7 +494,7 @@ begin
     end;
     if not FindColor(X, Y, srl_outline_black, 153, 121, 429, 252) then
     begin
-      Wait(10+Random(50));
+      Wait(100+Random(500));
       if not FindColor(X, Y, srl_outline_black, 153, 121, 429, 252) then
         Exit
       else
