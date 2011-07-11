@@ -1,6 +1,6 @@
 {///////////////////////////////////////////////////////////////////////////////
 //                                                                            //
-//                   Harry's Port Sarim Whatever Cutter v1.3                  //
+//                   Harry's Port Sarim Whatever Cutter v1.4                  //
 //                                                                            //
 //   Requirements:                                                            //
 //     Level 1+ woodcutting, axe wielded or in first inventory slot.          //
@@ -47,6 +47,7 @@
 //    1.3 - Banking made more efficient for those with an axe in their inv.   //
 //            Looting of Yew logs that other bots dropped/died with.          //
 //            Removal of possible but improbable infinite loop.               //
+//    1.4 - More banking failsafes if your axe is un-equipped.                //
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
@@ -93,7 +94,7 @@ const
   WORLD_LEAVE = True; // Hop words every ~25 minutes or so. WORLD_SWITCH must be true.
   DoYews  = False; // Chop Yews? (Not suggested due to them being such slow exp)
   YewAt   = 60;  // What level to begin Yew cutting at. DoYews must be true for this to activate.
-  GrabItems = True; // Grab expensive items if found on ground.
+  GrabItems = False; // Grab expensive items if found on ground. (a bit laggy)
   WCGoal = 99; // Stop player at this woodcutting level.
   AxeGrab = True; // Grab a bronze axe for free from Bob @ lumbridge, if your current axe gets lost.
   RandomNP = True; // Random NextPlayer (chooses random player to run next if using multiplayer).
@@ -125,7 +126,7 @@ const
 ////////////////////////////////////////////////////////////////////////////////
 
   SCRIPT_NAME        = 'Port Sarim Whatever Cutter';
-  SCRIPT_VERSION     = '1.3';
+  SCRIPT_VERSION     = '1.4';
 
 var PlayerSessionTime,ReportTimer,AntiBansGlobal, WillowsCutGlobal, BirdieGlobal,
      WorldLeaveMarker,WorldsHopped, DethWelks, StatsTimer, AtkFasf, notcooldood,
@@ -475,14 +476,14 @@ begin
 end;
 
 procedure DepositH; // by SRL etc, riced by me
-var
+var                 // It often thinks it's all deposited but isn't for some reason, hence the dumb huge loop.
    I, T, x, y,tti: Integer;
    B: TBox;
 begin
   tti := 0;
   repeat
     inc(tti);
-    for I := 2 to 28 do
+    for I := (2+Random(25)) to 28 do // most of the time you have just logs in inv, so make it humanlike
     begin
       B := DepositItemBox(I);
       if (not(FindColor(X, Y, srl_outline_black, B.X1, B.Y1, B.X2, B.Y2))) then
@@ -494,13 +495,13 @@ begin
     end;
     if not FindColor(X, Y, srl_outline_black, 153, 121, 429, 252) then
     begin
-      Wait(100+Random(500));
+      Wait(100+Random(300));
       if not FindColor(X, Y, srl_outline_black, 153, 121, 429, 252) then
-        Exit
+        Wait(1)
       else
         WriteLn('Inv not empty yet.');
     end;
-    Wait(200+Random(2000));
+    Wait(100+Random(100));
   until(tti > 6);
 end;
 
@@ -860,6 +861,8 @@ end;
 procedure YewRelocate;
 var J: TPoint; tx,ty: integer;
 begin
+  Antiban_Short;
+
   if Players[CurrentPlayer].Strings[7] <> 'yew' then
     Exit;
 
