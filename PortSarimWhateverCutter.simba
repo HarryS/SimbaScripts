@@ -1,6 +1,6 @@
 {///////////////////////////////////////////////////////////////////////////////
 //                                                                            //
-//                   Harry's Port Sarim Whatever Cutter v1.4                  //
+//                   Harry's Port Sarim Whatever Cutter v1.5                  //
 //                                                                            //
 //   Requirements:                                                            //
 //     Level 1+ woodcutting, axe wielded or in first inventory slot.          //
@@ -48,6 +48,7 @@
 //            Looting of Yew logs that other bots dropped/died with.          //
 //            Removal of possible but improbable infinite loop.               //
 //    1.4 - More banking failsafes if your axe is un-equipped.                //
+//    1.5 - Reflection 2 and BankFail won't turn your player offline.         //
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
@@ -78,12 +79,12 @@ begin
   begin
     Name        := 'Username';
     Pass        := 'Password';
-    Nick        := 'nickname';
+    Nick        := 'nick';
     Booleans[9] := True; // True if your axe is wielded. False if it's in inventory.
     Member      := False;
     Active      := True;
   end;
-  
+
 end;
 
 const
@@ -101,8 +102,8 @@ const
 
   Autochecken = True; // Automatically check for updates and download the newer version of the script if it gets updated.
 
-  SRLStats_Username = ''; // Your SRL Stats Username (not RS!)
-  SRLStats_Password = ''; // Your SRL Stats Password (not RS!)
+  SRLStats_Username = ''; // Your SRL Stats Username (not RS!) - get one at http://stats.villavu.com/
+  SRLStats_Password = ''; // Your SRL Stats Password (not RS!) - get one at http://stats.villavu.com/
 
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -126,7 +127,7 @@ const
 ////////////////////////////////////////////////////////////////////////////////
 
   SCRIPT_NAME        = 'Port Sarim Whatever Cutter';
-  SCRIPT_VERSION     = '1.4';
+  SCRIPT_VERSION     = '1.5';
 
 var PlayerSessionTime,ReportTimer,AntiBansGlobal, WillowsCutGlobal, BirdieGlobal,
      WorldLeaveMarker,WorldsHopped, DethWelks, StatsTimer, AtkFasf, notcooldood,
@@ -138,18 +139,18 @@ Var
   M, P: TPoint;
   CTRLPoints: TPointArray;
 Begin
-  P := TileToPoint(T);
+  P := T;
   Tm := (GetSystemTime + (5 * 60000));
-  if DistanceFrom(P) < 2 then
+  if R_DistanceFromTile(P) < 2 then
   begin
     if DebugMe then WriteLn('Located close enough to tile, unable to webwalk!');
     Exit;
   end;
   Repeat
-    M := GetMyPos;
+    M := R_GetMyPos;
     CtrlPoints := r_WindPath(M.x, M.y, P.X, P.Y, 5.0, 2.5, 0.0, 0.0, 4.5, 2.5);
     For I:= High(CtrlPoints) DownTo 0 Do
-      if WalkToTile(Tile(CtrlPoints[i].x, CtrlPoints[i].y),0, 10) Then
+      if R_WalkToTile(Point(CtrlPoints[i].x, CtrlPoints[i].y),0, 10) Then
       Begin
         Result := I = High(CtrlPoints);
         R_FindRandoms;
@@ -177,7 +178,7 @@ end;
 function NotSafeZone: boolean;
 var wTile: TPoint; LagTries,ee,movWait: integer;
 begin
-  if (DistanceFrom(Tile(3045, 3246)) > 50) then // PS dock
+  if (R_DistanceFromTile(Point(3045, 3246)) > 50) then // PS dock
   begin
     Writeln('Detected you away from Port Sarim - waiting a few seconds to know for sure.');
     Wait(2000+Random(5000));
@@ -185,7 +186,7 @@ begin
       Wait(10000+Random(5000)) // Anti-lag problems.
     else
       Wait(1000+Random(3000));
-    if (DistanceFrom(Tile(3045, 3246)) > 50) then
+    if (R_DistanceFromTile(Point(3045, 3246)) > 50) then
       Result := True
     else
       Result := False;
@@ -194,46 +195,46 @@ begin
     if Result then
     begin
       WriteLn('You probably ran away from Port Sarim - let''s walk back to it.');
-      wTile := TileToMM(Tile(3060, 3254));
+      wTile := R_TileToMM(Point(3060, 3254));
       if not rs_OnMiniMap(wTile.X, wTile.Y) then
       begin
         WriteLn('Tile doesn''t exist, o noes! Might you be in lubmy?');
         Result := True;
-        if (DistanceFrom(Tile(3222,3219)) < 50) and (GetPlaneIndex = 0) then
+        if (R_DistanceFromTile(Point(3222,3219)) < 50) and (R_GetPlaneIndex = 0) then
         begin
           WriteLn('You are in the Lubmy area. Let''s walk back to the bank.');
           // Deathwalk stuff.
           for ee := 1 to 3 do
-            R_ClickItem(ee, True, '');
+            R_ClickItem(ee, 'Wield');
           Inc(DethWelks);
-          R_WebWalkH(Tile(3238, 3219)); // Lumby east int
+          R_WebWalkH(Point(3238, 3219)); // Lumby east int
           r_FFlag(0);
           MarkTime(movWait);
           repeat
-            if (GetSpeed > 0) then
+            if (R_GetMotion > 0) then
               Wait(1+Random(50))
             else
               Break;
             if (TimeFromMark(movWait) > 10000) then
               Break;
           until False;
-          R_WebWalkH(Tile(3218, 3247)); // Lumby north gen store
+          R_WebWalkH(Point(3218, 3247)); // Lumby north gen store
           r_FFlag(5+Random(5)-Random(5));
-          R_WebWalkH(Tile(3078, 3249)); // draynor bank
+          R_WebWalkH(Point(3078, 3249)); // draynor bank
           r_FFlag(5+Random(5)-Random(5));
-          R_WebWalkH(Tile(3071, 3276)); // leave draynor
+          R_WebWalkH(Point(3071, 3276)); // leave draynor
           r_FFlag(5+Random(5)-Random(5));
-          R_WebWalkH(Tile(3065, 3275)); // leave draynor west
+          R_WebWalkH(Point(3065, 3275)); // leave draynor west
           r_FFlag(0);
           case Players[CurrentPlayer].Strings[7] of
-            'normal','oak': R_WebWalkH(Tile(3037, 3270));
-            'willow': R_WebWalkH(Tile(3060, 3254));
-            'yew': R_WebWalkH(Tile(3048, 3270));
+            'normal','oak': R_WebWalkH(Point(3037, 3270));
+            'willow': R_WebWalkH(Point(3060, 3254));
+            'yew': R_WebWalkH(Point(3048, 3270));
           end;
           r_FFlag(0);
           SetAngle(True);
           WriteLn('How does I reflection deathwalk? :D');
-          if (DistanceFrom(Tile(3060, 3254)) < 35) then
+          if (R_DistanceFromTile(Point(3060, 3254)) < 35) then
             Result := False
           else
             Result := True;
@@ -246,32 +247,32 @@ begin
           Cast('lumbridge home teleport', False);
           Wait(15000+Random(10000));
           WriteLn('(Probably) back in lumby via teleport!');
-          if (DistanceFrom(Tile(3222,3219)) < 50) and (GetPlaneIndex = 0) then
+          if (R_DistanceFromTile(Point(3222,3219)) < 50) and (R_GetPlaneIndex = 0) then
           begin
             Inc(DethWelks);
-            R_WebWalkH(Tile(3238, 3219)); // Lumby east int
+            R_WebWalkH(Point(3238, 3219)); // Lumby east int
             r_FFlag(0);
             MarkTime(movWait);
             repeat
-              if (GetSpeed > 0) then
+              if (R_GetMotion > 0) then
                 Wait(1+Random(50))
               else
                 Break;
               if (TimeFromMark(movWait) > 10000) then
                 Break;
             until False;
-            R_WebWalkH(Tile(3218, 3247)); // Lumby north gen store
+            R_WebWalkH(Point(3218, 3247)); // Lumby north gen store
             r_FFlag(5+Random(5)-Random(5));
-            R_WebWalkH(Tile(3078, 3249)); // draynor bank
+            R_WebWalkH(Point(3078, 3249)); // draynor bank
             r_FFlag(5+Random(5)-Random(5));
-            R_WebWalkH(Tile(3071, 3276)); // leave draynor
+            R_WebWalkH(Point(3071, 3276)); // leave draynor
             r_FFlag(5+Random(5)-Random(5));
-            R_WebWalkH(Tile(3065, 3275)); // leave draynor west
+            R_WebWalkH(Point(3065, 3275)); // leave draynor west
             r_FFlag(0);
             case Players[CurrentPlayer].Strings[7] of
-              'normal','oak': R_WebWalkH(Tile(3037, 3270));
-              'willow': R_WebWalkH(Tile(3060, 3254));
-              'yew': R_WebWalkH(Tile(3048, 3270));
+              'normal','oak': R_WebWalkH(Point(3037, 3270));
+              'willow': R_WebWalkH(Point(3060, 3254));
+              'yew': R_WebWalkH(Point(3048, 3270));
             end;
             r_FFlag(0);
             WriteLn('How does I reflection deathwalk?');
@@ -289,7 +290,7 @@ begin
           Inc(LagTries);
           Mouse(wTile.x, wTile.y, 1, 1, true);
           Wait(RandomRange(3000, 5000));
-        until (LagTries > 3) or (DistanceFrom(Tile(3060, 3254)) < 7);
+        until (LagTries > 3) or (R_DistanceFromTile(Point(3060, 3254)) < 7);
         if LagTries > 3 then
         begin
           WriteLn('Could not get back to the trees, we failed.');
@@ -402,7 +403,7 @@ begin
   end;
   repeat
     wait(66)
-    if (GetAnimation > -1) then
+    if (R_GetAnimation > -1) then
       Result := true;
   until Result or (GetSystemTime > T);
 end;
@@ -421,18 +422,18 @@ begin
 
   Tiles := [Point(3047,3239)];
 
-  SortTPAFrom(Tiles, GetMyPos);
-  if (DistanceFrom(Tiles[0]) > 3) or not TileOnMS(Tiles[0], 600) then
+  SortTPAFrom(Tiles, R_GetMyPos);
+  if (R_DistanceFromTile(Tiles[0]) > 3) or not R_TileOnMS(Tiles[0], 600) then
   begin
-    if not(TileOnMM(Tiles[0])) then
+    if not(R_TileOnMM(Tiles[0])) then
     begin
       WriteLn('Could not find Bank Booth.');
       Exit;
     end;
-    WalkToTile(Tiles[0], 0, 5);
+    R_WalkToTile(Tiles[0], 0, 5);
     Wait(1+Random(42));
   end;
-  if not(TileOnMS(Tiles[0], 600)) then
+  if not(R_TileOnMS(Tiles[0], 600)) then
   begin
     MarkTime(Bwait);
     repeat
@@ -442,12 +443,12 @@ begin
         WriteLn('Tired of waiting for bank, exit!');
         Exit;
       end;
-    until (TileOnMS(Tiles[0], 600));
+    until (R_TileOnMS(Tiles[0], 600));
   end;
 
   R_FindRandoms;
 
-  P := TileToMS(Tiles[0], 10);
+  P := R_TileToMS(Tiles[0], 10);
   MMouse(p.x - 7, p.y + 3, 16, 16);
   GetMousePos(bx,by);
   Wait(1+Random(12));
@@ -511,7 +512,7 @@ begin
   if not AxeGrab then
   begin
     WriteLn('Bob Axe support disabled (AxeGrab=False). Bye bye!');
-    Players[CurrentPlayer].Loc := 'NeedNewAxe1';
+    Players[CurrentPlayer].Rand := 'NeedNewAxe1';
     NPH(False);
     Exit;
   end;
@@ -523,7 +524,7 @@ begin
     Cast('lumbridge home teleport', False);
     Wait(15000+Random(10000));
     WriteLn('(Probably) back in lumby via teleport!');
-    if (DistanceFrom(Tile(3222,3219)) < 50) and (GetPlaneIndex = 0) then
+    if (R_DistanceFromTile(Point(3222,3219)) < 50) and (R_GetPlaneIndex = 0) then
     begin
       if R_ItemSlotExists(1) then
       begin
@@ -531,37 +532,37 @@ begin
           DropItem(28);
         DragItem(1,28);
       end;
-      R_WebWalkH(Tile(3230,3203));
+      R_WebWalkH(Point(3230,3203));
       R_FFlag(0);
       Wait(3000+Random(5000));
-      b0b := SortNPCs(GetNPCs('Bob'));
+      b0b := R_SortNPCs(R_GetNPCs('Bob',False));
       if GetArrayLength(b0b) = 0 then
       begin
         WriteLn('No Bob found, gotta die!');
-        Players[CurrentPlayer].Loc := 'BobFail3';
+        Players[CurrentPlayer].Rand := 'BobFail3';
         NPH(False);
         Exit;
       end;
-      if not TileOnMS(b0b[0].Tile, 600) then
+      if not R_TileOnMS(b0b[0].Tile, 600) then
       begin
         WriteLn('No Bob found, gotta die!');
-        Players[CurrentPlayer].Loc := 'BobFail5';
+        Players[CurrentPlayer].Rand := 'BobFail5';
         NPH(False);
         Exit;
       end;
       begin
         try
-          P := TileToMS(b0b[0].Tile, 600);
+          P := R_TileToMS(b0b[0].Tile, 600);
         except
           WriteLn('Failed to find Bob.');
-          Players[CurrentPlayer].Loc := 'BobFail7';
+          Players[CurrentPlayer].Rand := 'BobFail7';
           NPH(False);
           Exit;
         end;
         if (toStr(P.X) = '-1') or (toStr(P.Y) = '-1') then
         begin
           WriteLn('Failed to find Bob -1,-1.');
-          Players[CurrentPlayer].Loc := 'BobFail9';
+          Players[CurrentPlayer].Rand := 'BobFail9';
           NPH(False);
           Exit;
         end;
@@ -580,7 +581,7 @@ begin
             Mouse(655,31,10,10,True);
             R_FFlag(0);
             Wait(Random(2000));
-            R_ClickItem(1, True, '');
+            R_ClickItem(1, 'Wield');
             Wait(Random(2000));
             WriteLn('Logging out to clear chat box.');
             NPH(True);
@@ -589,7 +590,7 @@ begin
           else
           begin
             WriteLn('Failed to take axe.');
-            Players[CurrentPlayer].Loc := 'BobFail22';
+            Players[CurrentPlayer].Rand := 'BobFail22';
             NPH(False);
             Exit;
           end;
@@ -597,7 +598,7 @@ begin
         else
         begin
           WriteLn('Failed to click Bob.');
-          Players[CurrentPlayer].Loc := 'BobFail24';
+          Players[CurrentPlayer].Rand := 'BobFail24';
           NPH(False);
           Exit;
         end;
@@ -605,14 +606,14 @@ begin
     end else
     begin
       WriteLn('Lumby tele failed, gotta kill your guy.');
-      Players[CurrentPlayer].Loc := 'BobFail1';
+      Players[CurrentPlayer].Rand := 'BobFail1';
       NPH(False);
       Exit;
     end;
   end else
   begin
     WriteLn('No magic tab to tele, gotta kill your guy.');
-    Players[CurrentPlayer].Loc := 'BobFail2';
+    Players[CurrentPlayer].Rand := 'BobFail2';
   end;
 end;
 
@@ -624,32 +625,32 @@ begin
     Wait(100+Random(422)+Random(422));
     WriteLn('Emptied inv, get to the trees!');
     case Players[CurrentPlayer].Strings[7] of
-      'normal','oak': R_WebWalkH(Tile(3037, 3270));
-      'willow': R_WebWalkH(Tile(3060, 3254));
+      'normal','oak': R_WebWalkH(Point(3037, 3270));
+      'willow': R_WebWalkH(Point(3060, 3254));
       'yew':
         case curyew of
-          0: R_WebWalkH(Tile(3048-Random(2)+Random(2),3270-Random(2)+Random(2)));
-          1: R_WebWalkH(Tile(3042-Random(2)+Random(2), 3270-Random(2)+Random(2)));
-          2: R_WebWalkH(Tile(3054-Random(2)+Random(2), 3270-Random(2)+Random(2)));
+          0: R_WebWalkH(Point(3048-Random(2)+Random(2),3270-Random(2)+Random(2)));
+          1: R_WebWalkH(Point(3042-Random(2)+Random(2), 3270-Random(2)+Random(2)));
+          2: R_WebWalkH(Point(3054-Random(2)+Random(2), 3270-Random(2)+Random(2)));
         end;
     end;
     //r_FFlag(8);
     Exit;
   end else
   begin
-    r_WebWalkH(Tile(3047,3236)); // PSDB tile
+    r_WebWalkH(Point(3047,3236)); // PSDB tile
     Wait(10+Random(500));
-    if (Pos('hatchet',GetItemNameAt(1)) = 0) then
+    if (Pos('hatchet', R_GetItemNameAt(1)) = 0) then
     begin
       if not Players[CurrentPlayer].Booleans[9] then // axe in inv
       begin
         WriteLn('No axe in inv?.. Waiting.');
         wait(1000+Random(1000));
-        if (Pos('hatchet',GetItemNameAt(1)) = 0) then
+        if (Pos('hatchet', R_GetItemNameAt(1)) = 0) then
         begin
           WriteLn('No axe 2x. Gotta kill player.');
           WriteLn('Please equip an axe next time, it is more "stable".');
-          Players[CurrentPlayer].Loc := 'AxeFail1';
+          Players[CurrentPlayer].Rand := 'AxeFail1';
           NPH(False);
           Exit;
         end;
@@ -670,7 +671,7 @@ begin
     repeat
       R_QuickPSDB;
       Inc(FailTimes);
-      if DistanceFrom(Tile(3047,3236)) > 20 then
+      if R_DistanceFromTile(Point(3047,3236)) > 20 then
       begin
         WriteLn('Far away, might be random event?');
         Wait(10+Random(100));
@@ -688,7 +689,7 @@ begin
       Players[CurrentPlayer].Rand := 'FailBankFind1';
       CloseBank;
       Logout;
-      NPH(False);
+      NPH(True); // Used to be False - give them another chance.
       Exit;
     end;
 
@@ -744,7 +745,7 @@ end;
 function Moving: boolean;
 var Speed: integer;
 begin
-  Speed := GetSpeed;
+  Speed := R_GetMotion;
   if Speed < 1 then
     Result := False
   else
@@ -755,7 +756,7 @@ function BodenItems: boolean;
 var
   Items: TGroundItemArray;
   TempMS: TPoint;
-  iPad: Integer;
+  iiad: Integer;
 begin
   Result := False;
   if not GrabItems then
@@ -763,14 +764,14 @@ begin
   if not LoggedIn then
     Exit;
 
-  Items := GetItemsNear(3);
+  Items := R_GetGroundItemsEx([5070, 5071, 5072, 5073, 5074, 5075, 5076, 5077, 5078, 7413, 11966,1515,1359],3);
   if GetArrayLength(Items) > 0 then
   begin
-    for iPad := 0 to high(items) do // Make this more efficient later.
-      case items[iPad].ID of
+    for iiad := 0 to High(Items) do // Make this more efficient later.
+      case items[iiad].ID of
       5070, 5071, 5072, 5073, 5074, 5075, 5076, 5077, 5078, 7413, 11966:
       begin
-        TempMS := TileToMSEx(Items[iPad].Tile, 0.5, 0.5, 100);
+        TempMS := R_TileToMSEx(Items[iiad].Tile, 0.5, 0.5, 100);
         Mouse(TempMS.X, TempMS.Y, 5, 5, false);
         if R_WaitOption('Bird', 500) then
         begin
@@ -786,7 +787,7 @@ begin
       end;
       1515:
       begin
-        TempMS := TileToMSEx(Items[iPad].Tile, 0.5, 0.5, 100);
+        TempMS := R_TileToMSEx(Items[iiad].Tile, 0.5, 0.5, 100);
         Mouse(TempMS.X, TempMS.Y, 5, 5, false);
         if R_WaitOption('Take Yew', 500) then
         begin
@@ -802,7 +803,7 @@ begin
       end;
       1359:
       begin
-        TempMS := TileToMSEx(Items[iPad].Tile, 0.5, 0.5, 100);
+        TempMS := R_TileToMSEx(Items[iiad].Tile, 0.5, 0.5, 100);
         Mouse(TempMS.X, TempMS.Y, 5, 5, false);
         if R_WaitOption('Take Rune', 500) then
         begin
@@ -843,7 +844,7 @@ begin
       if PowerTmp > 5 then
       begin
         WriteLn('Failed 6x skil grabbing. Something is wrong.');
-        Players[CurrentPlayer].Loc := 'FailSkillGrab1';
+        Players[CurrentPlayer].Rand := 'FailSkillGrab1';
         NPH(False);
         Exit;
       end
@@ -871,15 +872,15 @@ begin
 
   if curyew = 0 then // nice place to see both trees at once.
   begin
-    if (DistanceFrom(Tile(3048,3270)) < 3) then
+    if (R_DistanceFromTile(Point(3048,3270)) < 3) then
     begin
       if Random(3) = 0 then
         Antiban_Short;
       Exit;
     end;
-    if (DistanceFrom(Tile(3048,3270)) > 50) then
+    if (R_DistanceFromTile(Point(3048,3270)) > 50) then
       Exit;
-    J := TileToMS(Tile(3048,3270), 300);
+    J := R_TileToMS(Point(3048,3270), 300);
     if r_TileOnMSH(J.X,J.Y) then
     begin
       MMouse(J.X-Random(20)+Random(20),J.Y-Random(20)+Random(20),0,0);
@@ -897,20 +898,20 @@ begin
         r_ChooseOption('alk here');
       end;
     end else
-      R_WebWalkH(Tile(3048-Random(2)+Random(2),3270-Random(2)+Random(2)));
+      R_WebWalkH(Point(3048-Random(2)+Random(2),3270-Random(2)+Random(2)));
   end;
 
   if curyew = 1 then // left tree
   begin
-    if (DistanceFrom(Tile(3042, 3270)) < 4) then
+    if (R_DistanceFromTile(Point(3042, 3270)) < 4) then
     begin
       if Random(3) = 0 then
         Antiban_Short;
       Exit;
     end;
-    if (DistanceFrom(Tile(3042, 3270)) > 50) then
+    if (R_DistanceFromTile(Point(3042, 3270)) > 50) then
       Exit;
-    J := TileToMS(Tile(3042, 3270), 300);
+    J := R_TileToMS(Point(3042, 3270), 300);
     if r_TileOnMSH(J.X,J.Y) then
     begin
       MMouse(J.X-Random(50)+Random(90),J.Y-Random(50)+Random(90),0,0);
@@ -928,20 +929,20 @@ begin
         r_ChooseOption('alk here');
       end;
     end else
-      R_WebWalkH(Tile(3042-Random(2)+Random(2), 3270-Random(2)+Random(2)));
+      R_WebWalkH(Point(3042-Random(2)+Random(2), 3270-Random(2)+Random(2)));
   end;
 
   if curyew = 2 then // right tree
   begin
-    if (DistanceFrom(Tile(3054, 3270)) < 4) then
+    if (R_DistanceFromTile(Point(3054, 3270)) < 4) then
     begin
       if Random(3) = 0 then
         Antiban_Short;
       Exit;
     end;
-    if (DistanceFrom(Tile(3054, 3270)) > 50) then
+    if (R_DistanceFromTile(Point(3054, 3270)) > 50) then
       Exit;
-    J := TileToMS(Tile(3054, 3270), 300);
+    J := R_TileToMS(Point(3054, 3270), 300);
     if r_TileOnMSH(J.X,J.Y) then
     begin
       MMouse(J.X-Random(50)+Random(90),J.Y-Random(50)+Random(90),0,0);
@@ -959,7 +960,7 @@ begin
         r_ChooseOption('alk here');
       end;
     end else
-      R_WebWalkH(Tile(3054-Random(2)+Random(2), 3270-Random(2)+Random(2)));
+      R_WebWalkH(Point(3054-Random(2)+Random(2), 3270-Random(2)+Random(2)));
   end;
 
 end;
@@ -978,7 +979,7 @@ begin
   if (R_GetSkillLevel(Skill_Woodcutting) >= WCGoal) then
   begin
     WriteLn('WCGoal has been hit - congrats!');
-    Players[CurrentPlayer].Loc := 'WCGoal';
+    Players[CurrentPlayer].Rand := 'WCGoal';
     NPH(False);
   end;
 
@@ -1012,7 +1013,7 @@ begin
 
   PreWalk := 0;
 
-  if (DistanceFrom(Tile(3222,3219)) < 50) and (GetPlaneIndex = 0) then // Lumby
+  if (R_DistanceFromTile(Point(3222,3219)) < 50) and (R_GetPlaneIndex = 0) then // Lumby
   begin
     WriteLn('In Lumbridge!');
     Exit;
@@ -1022,53 +1023,53 @@ begin
   begin
     case Players[CurrentPlayer].Strings[7] of
       'normal':
-        Baeume := [Tile(3010, 3274), Tile(3011, 3266), Tile(3014, 3273),
-          Tile(3018, 3271), Tile(3019, 3267), Tile(3023, 3279),
-          Tile(3027, 3271), Tile(3029, 3275), Tile(3030, 3281),
-          Tile(3031, 3266), Tile(3034, 3263), Tile(3036, 3266),
-          Tile(3038, 3274), Tile(3046, 3263), Tile(3046, 3268),
-          Tile(3046, 3272), Tile(3051, 3262), Tile(3051, 3266),
-          Tile(3058, 3267), Tile(3058, 3279), Tile(3067, 3279)];
+        Baeume := [Point(3010, 3274), Point(3011, 3266), Point(3014, 3273),
+          Point(3018, 3271), Point(3019, 3267), Point(3023, 3279),
+          Point(3027, 3271), Point(3029, 3275), Point(3030, 3281),
+          Point(3031, 3266), Point(3034, 3263), Point(3036, 3266),
+          Point(3038, 3274), Point(3046, 3263), Point(3046, 3268),
+          Point(3046, 3272), Point(3051, 3262), Point(3051, 3266),
+          Point(3058, 3267), Point(3058, 3279), Point(3067, 3279)];
       'oak':
-        Baeume := [Tile(3018, 3279), Tile(3018, 3280), Tile(3018, 3281),
-          Tile(3019, 3279), Tile(3019, 3280), Tile(3019, 3281),
-          Tile(3020, 3279), Tile(3020, 3280), Tile(3020, 3281),
-          Tile(3021, 3271), Tile(3021, 3272), Tile(3021, 3273),
-          Tile(3022, 3271), Tile(3022, 3272), Tile(3022, 3273),
-          Tile(3023, 3271), Tile(3023, 3272), Tile(3023, 3273),
-          Tile(3033, 3270), Tile(3033, 3271), Tile(3033, 3272),
-          Tile(3034, 3270), Tile(3034, 3271), Tile(3034, 3272),
-          Tile(3035, 3270), Tile(3035, 3271), Tile(3035, 3272),
-          Tile(3036, 3258), Tile(3036, 3259), Tile(3036, 3260),
-          Tile(3037, 3258), Tile(3037, 3259), Tile(3037, 3260),
-          Tile(3038, 3258), Tile(3038, 3259), Tile(3038, 3260),
-          Tile(3038, 3278), Tile(3038, 3279), Tile(3038, 3280),
-          Tile(3039, 3278), Tile(3039, 3279), Tile(3039, 3280),
-          Tile(3040, 3263), Tile(3040, 3264), Tile(3040, 3265),
-          Tile(3040, 3278), Tile(3040, 3279), Tile(3040, 3280),
-          Tile(3041, 3263), Tile(3041, 3264), Tile(3041, 3265),
-          Tile(3042, 3263), Tile(3042, 3264), Tile(3042, 3265),
-          Tile(3056, 3261), Tile(3056, 3262), Tile(3056, 3263),
-          Tile(3057, 3261), Tile(3057, 3262), Tile(3057, 3263),
-          Tile(3058, 3261), Tile(3058, 3262), Tile(3058, 3263),
-          Tile(3058, 3271), Tile(3058, 3272), Tile(3058, 3273),
-          Tile(3059, 3271), Tile(3059, 3272), Tile(3059, 3273),
-          Tile(3060, 3271), Tile(3060, 3272), Tile(3060, 3273)];
+        Baeume := [Point(3018, 3279), Point(3018, 3280), Point(3018, 3281),
+          Point(3019, 3279), Point(3019, 3280), Point(3019, 3281),
+          Point(3020, 3279), Point(3020, 3280), Point(3020, 3281),
+          Point(3021, 3271), Point(3021, 3272), Point(3021, 3273),
+          Point(3022, 3271), Point(3022, 3272), Point(3022, 3273),
+          Point(3023, 3271), Point(3023, 3272), Point(3023, 3273),
+          Point(3033, 3270), Point(3033, 3271), Point(3033, 3272),
+          Point(3034, 3270), Point(3034, 3271), Point(3034, 3272),
+          Point(3035, 3270), Point(3035, 3271), Point(3035, 3272),
+          Point(3036, 3258), Point(3036, 3259), Point(3036, 3260),
+          Point(3037, 3258), Point(3037, 3259), Point(3037, 3260),
+          Point(3038, 3258), Point(3038, 3259), Point(3038, 3260),
+          Point(3038, 3278), Point(3038, 3279), Point(3038, 3280),
+          Point(3039, 3278), Point(3039, 3279), Point(3039, 3280),
+          Point(3040, 3263), Point(3040, 3264), Point(3040, 3265),
+          Point(3040, 3278), Point(3040, 3279), Point(3040, 3280),
+          Point(3041, 3263), Point(3041, 3264), Point(3041, 3265),
+          Point(3042, 3263), Point(3042, 3264), Point(3042, 3265),
+          Point(3056, 3261), Point(3056, 3262), Point(3056, 3263),
+          Point(3057, 3261), Point(3057, 3262), Point(3057, 3263),
+          Point(3058, 3261), Point(3058, 3262), Point(3058, 3263),
+          Point(3058, 3271), Point(3058, 3272), Point(3058, 3273),
+          Point(3059, 3271), Point(3059, 3272), Point(3059, 3273),
+          Point(3060, 3271), Point(3060, 3272), Point(3060, 3273)];
       'willow':
-        Baeume := [Tile(3058, 3251), Tile(3062, 3253), Tile(3062, 3263), Tile(3065, 3258)];
+        Baeume := [Point(3058, 3251), Point(3062, 3253), Point(3062, 3263), Point(3065, 3258)];
       'yew':
-        Baeume := [Tile(3041, 3270), Tile(3041, 3271), Tile(3041, 3272),
-          Tile(3042, 3270), Tile(3042, 3271), Tile(3042, 3272),
-          Tile(3043, 3270), Tile(3043, 3271), Tile(3043, 3272),
-          Tile(3053, 3269), Tile(3053, 3270), Tile(3053, 3271),
-          Tile(3054, 3270), Tile(3054, 3271), Tile(3055, 3269),
-          Tile(3055, 3270), Tile(3055, 3271)];
+        Baeume := [Point(3041, 3270), Point(3041, 3271), Point(3041, 3272),
+          Point(3042, 3270), Point(3042, 3271), Point(3042, 3272),
+          Point(3043, 3270), Point(3043, 3271), Point(3043, 3272),
+          Point(3053, 3269), Point(3053, 3270), Point(3053, 3271),
+          Point(3054, 3270), Point(3054, 3271), Point(3055, 3269),
+          Point(3055, 3270), Point(3055, 3271)];
     end;
 
-    SortTPAFrom(Baeume, GetMyPos);
+    SortTPAFrom(Baeume, R_GetMyPos);
     for tti := 0 to High(Baeume) do
     begin
-      Weidenbaum := GetInteractableAt(Baeume[tti]);
+      Weidenbaum := R_GetObjectAt(Baeume[tti], OBJ_INTERACTABLE);
       case Weidenbaum.ID of
         38782,38783,38785,38786,38787: Result := True; // Normals
         38731,38732: Result := True; // Oaks
@@ -1086,12 +1087,12 @@ begin
       end;
     end;
     Result := False;
-    P := TileToMSEx(Weidenbaum.RealTile,0.5,0.5,300);
+    P := R_TileToMSEx(Weidenbaum.Tile,0.5,0.5,300);
     if not r_TileOnMSH(P.X,P.Y) then
     begin
       if DebugMe then WriteLn('Tree probably offscreen.');
       Wait(1+Random(50));
-      if (DistanceFrom(Weidenbaum.Tile) < 50) then
+      if (R_DistanceFromTile(Weidenbaum.Tile) < 50) then
       begin
         r_WebWalkH(Weidenbaum.Tile);
         R_FFlag(1);
@@ -1100,14 +1101,14 @@ begin
       case Players[CurrentPlayer].Strings[7] of
         'normal','oak':
         begin
-          R_WebWalkH(Tile(3037, 3270));
+          R_WebWalkH(Point(3037, 3270));
           FFlag(1);
           Exit;
         end;
         'willow':
         begin
           writeln('walking blind');
-          R_WebWalkH(Tile(3060, 3254));
+          R_WebWalkH(Point(3060, 3254));
           FFlag(1);
           Exit;
         end;
@@ -1120,7 +1121,7 @@ begin
       if TimeFromMark(ProperLog) > 900000 then // 15 minutes without a proper tree
       begin
         WriteLn('15 minutes not finding a log - something is BAD!');
-        Players[CurrentPlayer].Loc := '15MinutesNoTree';
+        Players[CurrentPlayer].Rand := '15MinutesNoTree';
         CloseBank;
         Logout;
         NPH(False);
@@ -1178,10 +1179,10 @@ begin
       begin
         Mouse(lx,ly,0,0,True);
         curtile := Weidenbaum.Tile;
-        if (DistanceTile(Tile(3042, 3270),Weidenbaum.Tile) < 6) then // right tree
+        if (R_DistanceTile(Point(3042, 3270),Weidenbaum.Tile) < 6) then // right tree
           curyew := 1
         else
-          if (DistanceTile(Tile(3054, 3270),Weidenbaum.Tile) < 6) then // left tree
+          if (R_DistanceTile(Point(3054, 3270),Weidenbaum.Tile) < 6) then // left tree
             curyew := 2
           else
             curyew := 0; // dunno which tree!
@@ -1207,7 +1208,7 @@ begin
           GameTab(Tab_Magic);
           Cast('lumbridge home teleport', False);
           Wait(15000+Random(10000));
-          if (DistanceFrom(Tile(3222,3219)) < 50) and (GetPlaneIndex = 0) then
+          if (R_DistanceFromTile(Point(3222,3219)) < 50) and (R_GetPlaneIndex = 0) then
           begin
             WriteLn('Back at home Lumby.');
             notcooldood := 0;
@@ -1219,7 +1220,7 @@ begin
           NPH(False);
           Exit;
         end;
-      if (DistanceFrom(Weidenbaum.Tile) < 30) then
+      if (R_DistanceFromTile(Weidenbaum.Tile) < 30) then
         if not Moving then
         begin
           r_WebWalkH(Weidenbaum.Tile);
@@ -1245,7 +1246,7 @@ begin
           FindVictim;
           Exit;
         end;
-        curstump := GetObjectAt(curtile,OBJECT_TYPE_INTERACTABLE);
+        curstump := R_GetObjectAt(curtile, OBJ_INTERACTABLE);
         case curstump.ID of
           38759, // Yew
           38725, // Willow
@@ -1337,7 +1338,7 @@ begin
   if DethWelks > 0 then
     WriteLn('<! Death-walked '+toStr(DethWelks)+' times.');
   if LoggedIn and not LobbyScreen then
-    WriteLn('<! There are '+ToStr(Length(GetAllPlayers))+' fellow botters woodcutting with you!');
+    WriteLn('<! There are '+ToStr(Length(R_GetAllPlayers))+' fellow botters woodcutting with you!');
   if BirdieGlobal > 0 then
     WriteLn('<! Items picked up: '+toStr(BirdieGlobal)+'.');
 
@@ -1442,10 +1443,9 @@ begin
 
   Autoupdateme;
 
-  SetUpSRL;
+  SetUpReflection;
   Reincarnate := True;
   DeclarePlayers;
-  SetUpReflectionEx(True);
   LampSkill := 'woodcutting';
 
   if (SRLStats_Username = '') then
