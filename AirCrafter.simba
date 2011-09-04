@@ -1,6 +1,6 @@
 ﻿{///////////////////////////////////////////////////////////////////////////////
 //                                                                            //
-//                          Harry's Air Crafter v0.2                          //
+//                          Harry's Air Crafter v0.3                          //
 //                                                                            //
 //   Requirements:                                                            //
 //     None! (Level 1 Runecrafting)                                           //
@@ -31,6 +31,7 @@
 //                              Changelog!                                    //
 //    0.1 - Initial release.                                                  //
 //    0.2 - Fixed small issue with finding ruins.                             //
+//    0.3 - Failsafe when getting random at ruins. Reflection 2 supported.    //
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
@@ -79,8 +80,8 @@ const
 
   Autochecken = True; // Automatically check for updates and download the newer version of the script if it gets updated.
 
-  SRLStats_Username = ''; // Your SRL Stats Username (not RS!)
-  SRLStats_Password = ''; // Your SRL Stats Password (not RS!)
+  SRLStats_Username = ''; // Your SRL Stats Username (not RS!) - get one at http://stats.villavu.com/
+  SRLStats_Password = ''; // Your SRL Stats Password (not RS!) - get one at http://stats.villavu.com/
 
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
@@ -103,8 +104,7 @@ const
 ////////////////////////////////////////////////////////////////////////////////
 
   SCRIPT_NAME        = 'Air Crafter';
-  SCRIPT_VERSION     = '0.2';
-  SECRET_GOOGLE_CODE = 'zAr4938d8b'; // Ignore this.
+  SCRIPT_VERSION     = '0.3';
 
 var PlayerSessionTime,ReportTimer,AntiBansGlobal, AirsCraftedGlobal,
      WorldLeaveMarker,WorldsHopped, DethWelks, StatsTimer, AtkFasf, notcooldood : integer;
@@ -115,26 +115,26 @@ Var
   M, P: TPoint;
   CTRLPoints: TPointArray;
 Begin
-  P := TileToPoint(T);
-  if DistanceFrom(P) < 2 then
+  P := T;
+  if R_DistanceFromTile(P) < 2 then
   begin
     WriteLn('Located close enough to tile, unable to webwalk!');
     Exit;
   end;
-  if DistanceFrom(P) > 175 then
+  if R_DistanceFromTile(P) > 175 then
   begin
     WriteLn('Too large of a distance - something is wrong.');
     Wait(2000+Random(2000));
-    if DistanceFrom(P) > 175 then
+    if R_DistanceFromTile(P) > 175 then
       Exit
     else
       WriteLn('De-lagged, close enough.');
   end;
   Repeat
-    M := GetMyPos;
+    M := R_GetMyPos;
     CtrlPoints := r_WindPath(M.x, M.y, P.X, P.Y, 5.0, 2.5, 0.0, 0.0, 4.5, 2.5);
     For I:= High(CtrlPoints) DownTo 0 Do
-      if WalkToTile(Tile(CtrlPoints[i].x, CtrlPoints[i].y),0, 10) Then
+      if R_WalkToTile(Point(CtrlPoints[i].x, CtrlPoints[i].y),0, 10) Then
       Begin
         Result := I = High(CtrlPoints);
         R_FindRandoms;
@@ -147,7 +147,7 @@ End;
 function NotSafeZone: boolean;
 var wTile: TPoint; LagTries,ee: integer;
 begin
-  if (DistanceFrom(Tile(3168, 3427)) > 55) then // tile to west of bank
+  if (R_DistanceFromTile(Point(3168, 3427)) > 55) then // tile to west of bank
   begin
     Writeln('Detected you away from Varrock West area - waiting a few seconds to know for sure.');
     Wait(2000+Random(5000));
@@ -155,7 +155,7 @@ begin
       Wait(10000+Random(5000)) // Anti-lag problems.
     else
       Wait(1000+Random(3000));
-    if (DistanceFrom(Tile(3168, 3427)) > 55) then
+    if (R_DistanceFromTile(Point(3168, 3427)) > 55) then
       Result := True
     else
       Result := False;
@@ -164,39 +164,39 @@ begin
     if Result then
     begin
       WriteLn('You probably ran away from Varrock West - let''s walk back to it.');
-      wTile := TileToMM(Tile(3183, 3435));// bank tile
+      wTile := R_TileToMM(Point(3183, 3435));// bank tile
       if not rs_OnMiniMap(wTile.X, wTile.Y) then
       begin
         WriteLn('Tile doesn''t exist, o noes! Might you be in lubmy?');
         Result := True;
-        if (DistanceFrom(Tile(3222,3219)) < 50) then // lumby tile
+        if (R_DistanceFromTile(Point(3222,3219)) < 50) then // lumby tile
         begin
           WriteLn('You are in the Lubmy area. Let''s walk back to the bank.');
           // Deathwalk stuff.
           for ee := 1 to 3 do
-            R_ClickItem(ee, True, '');
+            R_ClickItem(ee, 'Wield');
           Inc(DethWelks);
-          R_WebWalkH(Tile(3239, 3225)); // Lumby east int
+          R_WebWalkH(Point(3239, 3225)); // Lumby east int
           r_FFlag(0);
-          R_WebWalkH(Tile(3259, 3229)); // Desert border
+          R_WebWalkH(Point(3259, 3229)); // Desert border
           r_FFlag(5+Random(5)-Random(5));
-          R_WebWalkH(Tile(3238, 3283)); // North of Lumby cows
+          R_WebWalkH(Point(3238, 3283)); // North of Lumby cows
           r_FFlag(5+Random(5)-Random(5));
-          R_WebWalkH(Tile(3241, 3309)); // Cows North 2x
+          R_WebWalkH(Point(3241, 3309)); // Cows North 2x
           r_FFlag(5+Random(5)-Random(5));
 
 
-          R_WebWalkH(Tile(3239, 3336 )); // Crossing after cows
+          R_WebWalkH(Point(3239, 3336 )); // Crossing after cows
           r_FFlag(5+Random(5)-Random(5));
-          R_WebWalkH(Tile(3211, 3381)); // Varrock S Guards
+          R_WebWalkH(Point(3211, 3381)); // Varrock S Guards
           r_FFlag(5+Random(5)-Random(5));
-          R_WebWalkH(Tile(3212, 3425)); // Varrok Centre
+          R_WebWalkH(Point(3212, 3425)); // Varrok Centre
           r_FFlag(5+Random(5)-Random(5));
-          R_WebWalkH(Tile(3185, 3435)); // West Bank tile!
+          R_WebWalkH(Point(3185, 3435)); // West Bank tile!
           r_FFlag(0);
           SetAngle(True);
           WriteLn('How does I reflection deathwalk? :D');
-          if (DistanceFrom(Tile(3185, 3435)) < 35) then
+          if (R_DistanceFromTile(Point(3185, 3435)) < 35) then
             Result := False
           else
             Result := True;
@@ -217,25 +217,25 @@ begin
           end;
           Wait(15000+Random(10000));
           WriteLn('(Probably) back in lumby via teleport!');
-          if (DistanceFrom(Tile(3222,3219)) < 50) then
+          if (R_DistanceFromTile(Point(3222,3219)) < 50) then
           begin
             Inc(DethWelks);
-            R_WebWalkH(Tile(3239, 3225)); // Lumby east int
+            R_WebWalkH(Point(3239, 3225)); // Lumby east int
             r_FFlag(0);
-            R_WebWalkH(Tile(3259, 3229)); // Desert border
+            R_WebWalkH(Point(3259, 3229)); // Desert border
             r_FFlag(5+Random(5)-Random(5));
-            R_WebWalkH(Tile(3238, 3283)); // North of Lumby cows
+            R_WebWalkH(Point(3238, 3283)); // North of Lumby cows
             r_FFlag(5+Random(5)-Random(5));
-            R_WebWalkH(Tile(3241, 3309)); // Cows North 2x
+            R_WebWalkH(Point(3241, 3309)); // Cows North 2x
             r_FFlag(5+Random(5)-Random(5));
 
-            R_WebWalkH(Tile(3239, 3336 )); // Crossing after cows
+            R_WebWalkH(Point(3239, 3336 )); // Crossing after cows
             r_FFlag(5+Random(5)-Random(5));
-            R_WebWalkH(Tile(3211, 3381)); // Varrock S Guards
+            R_WebWalkH(Point(3211, 3381)); // Varrock S Guards
             r_FFlag(5+Random(5)-Random(5));
-            R_WebWalkH(Tile(3212, 3425)); // Varrok Centre
+            R_WebWalkH(Point(3212, 3425)); // Varrok Centre
             r_FFlag(5+Random(5)-Random(5));
-            R_WebWalkH(Tile(3185, 3435)); // West Bank tile!
+            R_WebWalkH(Point(3185, 3435)); // West Bank tile!
             r_FFlag(0);
             SetAngle(True);
             WriteLn('How does I reflection deathwalk x2? :D');
@@ -252,7 +252,7 @@ begin
           Inc(LagTries);
           Mouse(wTile.x, wTile.y, 1, 1, true);
           Wait(RandomRange(3000, 5000));
-        until (LagTries > 3) or (DistanceFrom(Tile(3183, 3435)) < 7); // bank tile
+        until (LagTries > 3) or (R_DistanceFromTile(Point(3183, 3435)) < 7); // bank tile
         if LagTries > 3 then
         begin
           WriteLn('Could not get back to le bank, we failed.');
@@ -356,7 +356,7 @@ begin
   end;
   repeat
     wait(66)
-    if (GetAnimation > -1) then
+    if (R_GetAnimation > -1) then
       Result := true;
   until Result or (GetSystemTime > T);
 end;
@@ -376,18 +376,18 @@ begin
                   Point(3181,3442), Point(3181,3440), Point(3181,3438),
                   Point(3181,3436)];
 
-  SortTPAFrom(Tiles, GetMyPos);
-  if (DistanceFrom(Tiles[0]) > 5) or not TileOnMS(Tiles[0], 10) then
+  SortTPAFrom(Tiles, R_GetMyPos);
+  if (R_DistanceFromTile(Tiles[0]) > 5) or not R_TileOnMS(Tiles[0], 10) then
   begin
-    if not(TileOnMM(Tiles[0])) then
+    if not(R_TileOnMM(Tiles[0])) then
     begin
       SRL_Warn('R_OpenBankBooth', 'Could not find Bank Booth.', Warn_AllVersions);
       Exit;
     end;
-    WalkToTile(Tiles[0], 0, 9);
+    R_WalkToTile(Tiles[0], 0, 9);
     Wait(1+Random(42));
   end;
-  if not(TileOnMS(Tiles[0], 10)) then
+  if not(R_TileOnMS(Tiles[0], 10)) then
   begin
     MarkTime(Bwait);
     repeat
@@ -397,15 +397,15 @@ begin
         WriteLn('Tired of waiting for bank, exit!');
         Exit;
       end;
-    until (TileOnMS(Tiles[0], 10));
+    until (R_TileOnMS(Tiles[0], 10));
   end;
 
   R_FindRandoms;
 
-  P := TileToMS(Tiles[0], 10);
+  P := R_TileToMS(Tiles[0], 10);
   Mouse(p.x - 7, p.y - 7, 16, 16, False);
   Wait(1+Random(42));
-  if OptionExists('ank Banker') then
+  if R_OptionExists('ank Banker') then
   begin
     R_ChooseOption('ank Banker');
     repeat
@@ -423,7 +423,7 @@ begin
       Result := R_BankScreen or R_PinScreen;
     until Result or (Tries > 10);
   end else
-  if OptionExists('se-quickly') then
+  if R_OptionExists('se-quickly') then
   begin
     R_ChooseOption('se-quickly');
     repeat
@@ -460,15 +460,15 @@ begin
   Result := False;
   SetRun(True);
   WriteLn('Gonna rest.');
-  R_WebWalkH(Tile(3153, 3421));
+  R_WebWalkH(Point(3153, 3421));
   R_FFlag(Random(3));
   MarkTime(MusicFsafe);
   Wait(100+Random(500));
   for srch := 0 to 5 do
   begin
-    if (FindNPC('usician', MusicTile)) then
+    MusicTile := R_GetNPC('usician', False);
     begin
-      P := TileToMS(MusicTile.Tile, 819);
+      P := R_TileToMS(MusicTile.Tile, 819);
       MMouse(P.X, P.Y, 5, 5);
       GetMousePos(lx,ly);
       Wait(1+Random(5));
@@ -476,7 +476,7 @@ begin
       begin
         Mouse(lx,ly,0,0,False);
         Wait(1+Random(5));
-        Result := OptionExists('isten');
+        Result := R_OptionExists('isten');
         if Result then
         begin
           R_ChooseOption('isten');
@@ -514,28 +514,28 @@ begin
     WriteLn('Got the rune ess! Get to the crafting area!');
     if CurrentEnergy < 30 then
       GetRestedUp;
-    r_WebWalkH(Tile(3129, 3405)); // outside craft area
+    r_WebWalkH(Point(3129, 3405)); // outside craft area
     //r_FFlag(8);
     Exit;
   end else
   begin
     Wait(1500+Random(2000));
     portalfails := 0;
-    if DistanceFrom(Tile(2841, 4829)) < 30 then // n portal
+    if R_DistanceFromTile(Point(2841, 4829)) < 30 then // n portal
     repeat
       inc(portalfails);
-      letile := TileToMS(Tile(2841, 4828),600);
+      letile := R_TileToMS(Point(2841, 4828),600);
       if (toStr(letile.X) = '-1') or (toStr(letile.Y) = '-1') then
       begin
         WriteLn('Empty location, portal probably offscreen.');
         Wait(100+Random(50));
-        if (DistanceFrom(Tile(2841, 4828)) > 6) then
-          r_WebWalkH(Tile(2841, 4829));
+        if (R_DistanceFromTile(Point(2841, 4828)) > 6) then
+          r_WebWalkH(Point(2841, 4829));
       end;
-      if not TileOnMS(Tile(2841, 4828), 600) then
+      if not R_TileOnMS(Point(2841, 4828), 600) then
       begin
         WriteLn('Tile not on MS?.. walking');
-        WalkToTile(Tile(2841, 4827),1,1)
+        R_WalkToTile(Point(2841, 4827),1,1)
       end
       else
       begin
@@ -549,11 +549,11 @@ begin
           if Result then
           begin
             MarkTime(portalfsf);
-            while (DistanceFrom(Tile(2841, 4829)) < 30) and (TimeFromMark(portalfsf) < 5000) do
+            while (R_DistanceFromTile(Point(2841, 4829)) < 30) and (TimeFromMark(portalfsf) < 5000) do
               Wait(100+Random(300));
             if TimeFromMark(portalfsf) > 5000 then
               WriteLn('Still stuck in Portal Land. Try again.');
-            if DistanceFrom(Tile(2841, 4829)) > 30 then
+            if R_DistanceFromTile(Point(2841, 4829)) > 30 then
             begin
               WriteLn('Left craft area, time to go home!');
               Wait(100+Random(500));
@@ -564,7 +564,7 @@ begin
         end;
       end;
     until (portalfails > 10);
-    if (portalfails > 10) and (DistanceFrom(Tile(2841, 4829)) < 30) then
+    if (portalfails > 10) and (R_DistanceFromTile(Point(2841, 4829)) < 30) then
     begin
       WriteLn('Failed to find portal/leave area');
       Players[CurrentPlayer].Rand := 'FailLeavePortal1';
@@ -575,9 +575,9 @@ begin
     Result := False;
     if CurrentEnergy < 30 then
       GetRestedUp;
-    r_WebWalkH(Tile(3183, 3435)); // VWB bank tile.
+    r_WebWalkH(Point(3183, 3435)); // VWB bank tile.
     R_FFlag(0);
-    howmanys := GetItemStackSizeAt(1);
+    howmanys := R_GetItemStackSizeAt(1);
     if (howmanys < 0) then
       howmanys := 0;
     WriteLn('Made '+tostr(howmanys)+' air runes.');
@@ -593,7 +593,7 @@ begin
     repeat
       R_QuickVWB;
       Inc(FailTimes);
-      if DistanceFrom(Tile(3183, 3435)) > 20 then
+      if R_DistanceFromTile(Point(3183, 3435)) > 20 then
       begin
         WriteLn('Far away, might be random event?');
         Wait(10+Random(100));
@@ -602,6 +602,21 @@ begin
         else
           Wait(10+Random(100));
       end;
+      if FailTimes > 27 then
+        if TabExists(Tab_Magic) then
+        begin
+          WriteLn('We have the power to teleabort!');
+          GameTab(Tab_Magic);
+          Cast('lumbridge home teleport', False);
+          Wait(15000+Random(10000));
+          WriteLn('(Probably) back in lumby via teleport!');
+          if (R_DistanceFromTile(Point(3222,3219)) < 50) and (R_GetPlaneIndex = 0) then
+          begin
+            WriteLn('Back at Lumby, let''s try again.');
+            FailTimes := 0;
+            Exit;
+          end;
+        end;
     until R_BankScreen or R_PinScreen or (FailTimes > 29) or (not LoggedIn);
     if not LoggedIn then
       Exit;
@@ -637,7 +652,7 @@ begin
     Wait(10+Random(500));
     FixBank;
     Wait(1+Random(42));
-    if not R_WithdrawItem(1436, 0) then // rune ess 1x
+    if not R_WithdrawItem(1436, True) then // rune ess 1x
     begin
       Result := False;
       WriteLn('Failed to grab any rune ess 1x!');
@@ -649,7 +664,7 @@ begin
       Exit;
     end;
 
-    if not R_WithdrawItem(1436, 0) then // rune ess 2x
+    if not R_WithdrawItem(1436, True) then // rune ess 2x
     begin
       Result := False;
       WriteLn('Failed to grab any rune ess 2x!');
@@ -676,7 +691,7 @@ end;
 function Moving: boolean;
 var Speed: integer;
 begin
-  Speed := GetSpeed;
+  Speed := R_GetMotion;
   if Speed < 1 then
     Result := False
   else
@@ -727,7 +742,7 @@ begin
 
   PreWalk := 0;
 
-  if (DistanceFrom(Tile(3222,3219)) < 50) then // Lumby
+  if (R_DistanceFromTile(Point(3222,3219)) < 50) then // Lumby
   begin
     WriteLn('In Lumbridge!');
     Exit;
@@ -735,24 +750,24 @@ begin
 
   for srch := 0 to 3 do // if reflection misclicks water so it won't wait 2 seconds
   begin
-    P := TileToMS(Tile(3128, 3405),600);
+    P := R_TileToMS(Point(3128, 3405),600);
     if (toStr(P.X) = '-1') or (toStr(P.Y) = '-1') then
     begin
       if DebugMe then WriteLn('Empty location, ruin probably offscreen.');
       Wait(10+Random(50));
-      if (DistanceFrom(Tile(3129, 3405)) > 0) then
+      if (R_DistanceFromTile(Point(3129, 3405)) > 0) then
         if not Moving then
-          r_WebWalkH(Tile(3129, 3405));
+          r_WebWalkH(Point(3129, 3405));
       Exit;
     end;
-    if not TileOnMS(P, 600) then
-      if P = Tile(-1, -1) then
+    if not R_TileOnMS(P, 600) then
+      if P = Point(-1, -1) then
         if not Moving then
-          R_WebWalkH(Tile(3239,3433));
+          R_WebWalkH(Point(3239,3433));
 
     begin
       try
-        P := TileToMS(Tile(3128, 3405), 600);
+        P := R_TileToMS(Point(3128, 3405), 600);
       except
         WriteLn('Failed to find ruin!');
         Exit;
@@ -779,9 +794,9 @@ begin
         WriteLn('Failed to find ruins 30 times... Something might be bad.');
         AtkFasf := 0;
         Inc(notcooldood);
-        if (DistanceFrom(Tile(3128, 3405)) < 50) then
+        if (R_DistanceFromTile(Point(3128, 3405)) < 50) then
           if not Moving then
-            r_WebWalkH(Tile(3128, 3405));
+            r_WebWalkH(Point(3128, 3405));
         if notcooldood > 1 then
           if TabExists(Tab_Magic) then
           begin
@@ -797,7 +812,7 @@ begin
               Exit;
             end;
             Wait(15000+Random(10000));
-            if (DistanceFrom(Tile(3222,3219)) < 50) then
+            if (R_DistanceFromTile(Point(3222,3219)) < 50) then
             begin
               WriteLn('Back at home Lumby.');
               notcooldood := 0;
@@ -825,7 +840,7 @@ begin
           if not Result then
           begin
             try
-              P := TileToMS(Tile(2843, 4833),600);
+              P := R_TileToMS(Point(2843, 4833),600);
             except
               WriteLn('Failed to find ruin!');
               Exit;
@@ -1018,10 +1033,9 @@ begin
 
   Autoupdateme;
 
-  SetUpSRL;
+  SetUpReflection;
   Reincarnate := True;
   DeclarePlayers;
-  SetUpReflectionEx(True);
 
   if (SRLStats_Username = '') then
     SetupSRLStats(64, 'Anonymous', 'anon1337')
