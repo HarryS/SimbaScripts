@@ -1,6 +1,6 @@
 {///////////////////////////////////////////////////////////////////////////////
 //                                                                            //
-//                     Harry's Falador Guard Killer v0.5                      //
+//                     Harry's Falador Guard Killer v0.6                      //
 //                                                                            //
 //   Requirements:                                                            //
 //     Level 23 (or higher) combat level required, 35+ suggested.             //
@@ -42,6 +42,7 @@
 //            Writes exp gained per character per hour.                       //
 //    0.4 - SRL online stats.                                                 //
 //    0.5 - More failsafes on guard attacking, smoothed out some stuff.       //
+//    0.6 - Reflection 2 support.                                             //
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
@@ -114,9 +115,8 @@ const
 ////////////////////////////////////////////////////////////////////////////////
 
   SCRIPT_NAME        = 'Falador Guard Killer';
-  SCRIPT_VERSION     = '0.5';
-  SECRET_GOOGLE_CODE = 'D8drez3z928'; // Ignore this.
-
+  SCRIPT_VERSION     = '0.6';
+  
 var PlayerSessionTime,ReportTimer,AntiBansGlobal, GuardsClickedGlobal,
      WorldLeaveMarker,WorldsHopped, DethWelks, StatsTimer, AtkFasf, notcooldood : integer;
 
@@ -126,12 +126,12 @@ Var
   M, P: TPoint;
   CTRLPoints: TPointArray;
 Begin
-  P := TileToPoint(T);
+  P := T;
   Repeat
-    M := GetMyPos;
+    M := R_GetMyPos;
     CtrlPoints := r_WindPath(M.x, M.y, P.X, P.Y, 5.0, 2.5, 0.0, 0.0, 4.5, 2.5);
     For I:= High(CtrlPoints) DownTo 0 Do
-      if WalkToTile(Tile(CtrlPoints[i].x, CtrlPoints[i].y),0, 10) Then
+      if R_WalkToTile(Point(CtrlPoints[i].x, CtrlPoints[i].y),0, 10) Then
       Begin
         Result := I = High(CtrlPoints);
         R_FindRandoms;
@@ -144,7 +144,7 @@ End;
 function NotSafeZone: boolean;
 var wTile: TPoint; LagTries,ee: integer;
 begin
-  if (DistanceFrom(Tile(2964, 3381)) > 35) then // Tile is at Fally north center.
+  if (R_DistanceFromTile(Point(2964, 3381)) > 35) then // Tile is at Fally north center.
   begin
     Writeln('Detected you away from Falador - waiting a few seconds to know for sure.');
     Wait(4000+Random(5000));
@@ -152,7 +152,7 @@ begin
       Wait(10000+Random(5000)) // Anti-lag problems.
     else
       Wait(3000+Random(3000));
-    if (DistanceFrom(Tile(2964, 3381)) > 35) then
+    if (R_DistanceFromTile(Point(2964, 3381)) > 35) then
       Result := True
     else
       Result := False;
@@ -161,35 +161,35 @@ begin
     if Result then
     begin
       WriteLn('You probably ran away from those scary guards - let''s walk back to them.');
-      wTile := TileToMM(Tile(2965, 3394)); // North guard spot.
+      wTile := R_TileToMM(Point(2965, 3394)); // North guard spot.
       if not rs_OnMiniMap(wTile.X, wTile.Y) then
       begin
         WriteLn('Tile doesn''t exist, o noes! Might you be in lubmy?');
         Result := True;
-        if (DistanceFrom(Tile(3222, 3219)) < 50) then
+        if (R_DistanceFromTile(Point(3222, 3219)) < 50) then
         begin
           WriteLn('You are in the Lubmy area. Let''s walk back to the guards.');
           // Deathwalk stuff.
           for ee := 1 to 3 do
-            R_ClickItem(ee, True, '');
+            R_ClickItem(ee, 'Wield');
           Inc(DethWelks);
-          R_WebWalkH(Tile(3235, 3219)); // Lumby east int
+          R_WebWalkH(Point(3235, 3219)); // Lumby east int
           r_FFlag(0);
-          R_WebWalkH(Tile(3218, 3247)); // Lumby north gen store
+          R_WebWalkH(Point(3218, 3247)); // Lumby north gen store
           r_FFlag(5+Random(5)-Random(5));
-          R_WebWalkH(Tile(3078, 3249)); // draynor bank
+          R_WebWalkH(Point(3078, 3249)); // draynor bank
           r_FFlag(5+Random(5)-Random(5));
-          R_WebWalkH(Tile(3071, 3276)); // leave draynor
+          R_WebWalkH(Point(3071, 3276)); // leave draynor
           r_FFlag(5+Random(5)-Random(5));
-          R_WebWalkH(Tile(3008, 3279)); // music/highwaymen s. fally
+          R_WebWalkH(Point(3008, 3279)); // music/highwaymen s. fally
           r_FFlag(5+Random(5)-Random(5));
-          R_WebWalkH(Tile(3005, 3362)); // fally east bank
+          R_WebWalkH(Point(3005, 3362)); // fally east bank
           r_FFlag(5+Random(5)-Random(5));
-          R_WebWalkH(Tile(2964, 3381)); // Fally center
+          R_WebWalkH(Point(2964, 3381)); // Fally center
           r_FFlag(0);
           SetAngle(True);
           WriteLn('How does I reflection deathwalk?');
-          if (DistanceFrom(Tile(2964, 3381)) < 35) then
+          if (R_DistanceFromTile(Point(2964, 3381)) < 35) then
             Result := False
           else
             Result := True;
@@ -210,22 +210,22 @@ begin
           end;
           Wait(15000+Random(10000));
           WriteLn('(Probably) back in lumby via teleport!');
-          if (DistanceFrom(Tile(3222, 3219)) < 50) then
+          if (R_DistanceFromTile(Point(3222, 3219)) < 50) then
           begin
             Inc(DethWelks);
-            R_WebWalkH(Tile(3235, 3219)); // Lumby east int
+            R_WebWalkH(Point(3235, 3219)); // Lumby east int
             r_FFlag(0);
-            R_WebWalkH(Tile(3218, 3247)); // Lumby north gen store
+            R_WebWalkH(Point(3218, 3247)); // Lumby north gen store
             r_FFlag(5+Random(5)-Random(5));
-            R_WebWalkH(Tile(3078, 3249)); // draynor bank
+            R_WebWalkH(Point(3078, 3249)); // draynor bank
             r_FFlag(5+Random(5)-Random(5));
-            R_WebWalkH(Tile(3071, 3276)); // leave draynor
+            R_WebWalkH(Point(3071, 3276)); // leave draynor
             r_FFlag(5+Random(5)-Random(5));
-            R_WebWalkH(Tile(3008, 3279)); // music/highwaymen s. fally
+            R_WebWalkH(Point(3008, 3279)); // music/highwaymen s. fally
             r_FFlag(5+Random(5)-Random(5));
-            R_WebWalkH(Tile(3005, 3362)); // fally east bank
+            R_WebWalkH(Point(3005, 3362)); // fally east bank
             r_FFlag(5+Random(5)-Random(5));
-            R_WebWalkH(Tile(2964, 3381)); // Fally center
+            R_WebWalkH(Point(2964, 3381)); // Fally center
             r_FFlag(0);
             WriteLn('How does I reflection deathwalk?');
             SetAngle(True);
@@ -242,7 +242,7 @@ begin
           Inc(LagTries);
           Mouse(wTile.x, wTile.y, 1, 1, true);
           Wait(RandomRange(3000, 5000));
-        until (LagTries > 3) or (DistanceFrom(Tile(2965, 3394)) < 7);
+        until (LagTries > 3) or (R_DistanceFromTile(Point(2965, 3394)) < 7);
         if LagTries > 3 then
         begin
           WriteLn('Could not get back to le guards, we failed.');
@@ -347,7 +347,7 @@ begin
   end;
   repeat
     wait(66)
-    if (GetAnimation > -1) then
+    if (R_GetAnimation > -1) then
       Result := true;
   until Result or (GetSystemTime > T);
 end;
@@ -364,12 +364,12 @@ begin
     Exit;
   end else
   begin
-    r_WebWalkH(Tile(2946, 3369)); // Fally bank tile.
+    r_WebWalkH(Point(2946, 3369)); // Fally bank tile.
     R_FFlag(0);
     wait(1500+Random(1000));
     FailTimes := 0;
     repeat
-      R_OpenBankBooth('fwb');
+      R_OpenBankBooth;
       Inc(FailTimes);
     until R_BankScreen or R_PinScreen or (FailTimes > 4) or (not LoggedIn);
     if not LoggedIn then
@@ -406,7 +406,7 @@ begin
           Inc(areyoudoneyet);
         if (areyoudoneyet > 9) then
           Break;
-        if (DistanceFrom(Tile(3222, 3219)) < 50) then
+        if (R_DistanceFromTile(Point(3222, 3219)) < 50) then
           Break;
         if not LoggedIn then
           Exit;
@@ -426,22 +426,22 @@ begin
         BankinDat('enter'); // heard you liked banking
         Exit;
       end;
-      if (DistanceFrom(Tile(3222, 3219)) < 50) then
+      if (R_DistanceFromTile(Point(3222, 3219)) < 50) then
       begin
         WriteLn('You died D; Gotta run back.');
         Exit;
       end;
       WriteLn('This should never happen!! THE BEEEEEEEES');
     end;
-    if not R_WithdrawItem(379, 10) then // Lobster
+    if not R_WithdrawX(379, 10) then // Lobster
     begin
       Result := False;
       WriteLn('Failed to grab any lobsters!');
-      if not R_WithdrawItem(361, 10) then // Tuna
+      if not R_WithdrawX(361, 10) then // Tuna
       begin
         Result := False;
         WriteLn('Failed to grab any tuna!');
-        if not R_WithdrawItem(333, 10) then // Trout
+        if not R_WithdrawX(333, 10) then // Trout
         begin
           Result := False;
           WriteLn('Failed to grab any trout!');
@@ -507,21 +507,21 @@ begin
             WriteLn('No trout!');
           end else
           begin
-            R_ClickItem(Lefood.slot, True, '');
+            R_ClickItem(Lefood.slot, 'Eat');
             WriteLn('We ate a trout.');
             Result:=True;
             Exit;
           end;
         end else
         begin
-          R_ClickItem(Lefood.slot, True, '');
+          R_ClickItem(Lefood.slot, 'Eat');
           WriteLn('We ate a tuna.');
           Result:=True;
           Exit;
         end;
       end else
       begin
-        R_ClickItem(Lefood.slot, True, '');
+        R_ClickItem(Lefood.slot, 'Eat');
         WriteLn('We ate a lobster.');
         Result:=True;
         Exit;
@@ -541,67 +541,67 @@ end;
 function InBarbahshop: boolean;
 var CurPos: TTile;
 begin
-  CurPos := GetMyPos;
+  CurPos := R_GetMyPos;
   case CurPos of
-    Tile(2945, 3388): Result := True;
-    Tile(2944, 3388): Result := True;
-    Tile(2944, 3387): Result := True;
-    Tile(2944, 3386): Result := True;
-    Tile(2945, 3386): Result := True;
-    Tile(2944, 3386): Result := True;
-    Tile(2943, 3386): Result := True;
-    Tile(2942, 3386): Result := True;
-    Tile(2943, 3386): Result := True;
-    Tile(2943, 3385): Result := True;
-    Tile(2944, 3385): Result := True;
-    Tile(2945, 3385): Result := True;
-    Tile(2945, 3384): Result := True;
-    Tile(2944, 3384): Result := True;
-    Tile(2943, 3384): Result := True;
-    Tile(2942, 3384): Result := True;
-    Tile(2943, 3384): Result := True;
-    Tile(2943, 3383): Result := True;
-    Tile(2944, 3383): Result := True;
-    Tile(2944, 3382): Result := True;
-    Tile(2945, 3382): Result := True;
-    Tile(2944, 3382): Result := True;
-    Tile(2943, 3382): Result := True;
-    Tile(2942, 3382): Result := True;
-    Tile(2943, 3382): Result := True;
-    Tile(2943, 3381): Result := True;
-    Tile(2944, 3381): Result := True;
-    Tile(2945, 3381): Result := True;
-    Tile(2945, 3380): Result := True;
-    Tile(2946, 3380): Result := True;
-    Tile(2947, 3380): Result := True;
-    Tile(2946, 3380): Result := True;
-    Tile(2945, 3380): Result := True;
-    Tile(2944, 3380): Result := True;
-    Tile(2943, 3380): Result := True;
-    Tile(2942, 3380): Result := True;
-    Tile(2943, 3380): Result := True;
-    Tile(2943, 3379): Result := True;
-    Tile(2944, 3379): Result := True;
-    Tile(2945, 3379): Result := True;
-    Tile(2946, 3379): Result := True;
-    Tile(2947, 3379): Result := True;
-    Tile(2948, 3379): Result := True;
-    Tile(2948, 3378): Result := True;
-    Tile(2947, 3378): Result := True;
-    Tile(2947, 3379): Result := True;
-    Tile(2946, 3379): Result := True;
-    Tile(2945, 3379): Result := True;
-    Tile(2945, 3378): Result := True;
-    Tile(2944, 3378): Result := True;
-    Tile(2943, 3378): Result := True;
-    Tile(2942, 3378): Result := True;
-    Tile(2943, 3378): Result := True;
-    Tile(2943, 3377): Result := True;
-    Tile(2943, 3378): Result := True;
-    Tile(2944, 3378): Result := True;
-    Tile(2945, 3378): Result := True;
-    Tile(2945, 3377): Result := True;
-    Tile(2946, 3377): Result := True;
+    Point(2945, 3388): Result := True;
+    Point(2944, 3388): Result := True;
+    Point(2944, 3387): Result := True;
+    Point(2944, 3386): Result := True;
+    Point(2945, 3386): Result := True;
+    Point(2944, 3386): Result := True;
+    Point(2943, 3386): Result := True;
+    Point(2942, 3386): Result := True;
+    Point(2943, 3386): Result := True;
+    Point(2943, 3385): Result := True;
+    Point(2944, 3385): Result := True;
+    Point(2945, 3385): Result := True;
+    Point(2945, 3384): Result := True;
+    Point(2944, 3384): Result := True;
+    Point(2943, 3384): Result := True;
+    Point(2942, 3384): Result := True;
+    Point(2943, 3384): Result := True;
+    Point(2943, 3383): Result := True;
+    Point(2944, 3383): Result := True;
+    Point(2944, 3382): Result := True;
+    Point(2945, 3382): Result := True;
+    Point(2944, 3382): Result := True;
+    Point(2943, 3382): Result := True;
+    Point(2942, 3382): Result := True;
+    Point(2943, 3382): Result := True;
+    Point(2943, 3381): Result := True;
+    Point(2944, 3381): Result := True;
+    Point(2945, 3381): Result := True;
+    Point(2945, 3380): Result := True;
+    Point(2946, 3380): Result := True;
+    Point(2947, 3380): Result := True;
+    Point(2946, 3380): Result := True;
+    Point(2945, 3380): Result := True;
+    Point(2944, 3380): Result := True;
+    Point(2943, 3380): Result := True;
+    Point(2942, 3380): Result := True;
+    Point(2943, 3380): Result := True;
+    Point(2943, 3379): Result := True;
+    Point(2944, 3379): Result := True;
+    Point(2945, 3379): Result := True;
+    Point(2946, 3379): Result := True;
+    Point(2947, 3379): Result := True;
+    Point(2948, 3379): Result := True;
+    Point(2948, 3378): Result := True;
+    Point(2947, 3378): Result := True;
+    Point(2947, 3379): Result := True;
+    Point(2946, 3379): Result := True;
+    Point(2945, 3379): Result := True;
+    Point(2945, 3378): Result := True;
+    Point(2944, 3378): Result := True;
+    Point(2943, 3378): Result := True;
+    Point(2942, 3378): Result := True;
+    Point(2943, 3378): Result := True;
+    Point(2943, 3377): Result := True;
+    Point(2943, 3378): Result := True;
+    Point(2944, 3378): Result := True;
+    Point(2945, 3378): Result := True;
+    Point(2945, 3377): Result := True;
+    Point(2946, 3377): Result := True;
   end;
 end;
 
@@ -615,9 +615,9 @@ begin
     Wait(500+Random(2000));
     if InBarbahshop then
     begin
-      if TileOnMM(Tile(2948, 3379)) then
+      if R_TileOnMM(Point(2948, 3379)) then
       begin
-        leherp := TileToMM(Tile(2948, 3379));
+        leherp := R_TileToMM(Point(2948, 3379));
         Mouse(leherp.X, leherp.Y,10,10,True);
         Wait(1+Random(42));
         R_FFlag(0);
@@ -626,12 +626,12 @@ begin
         Wait(42+Random(1000));
         MakeCompass('E');
         Wait(42+Random(1000));
-        leherp := TileToMS(Tile(2951, 3379),200);
+        leherp := R_TileToMS(Point(2951, 3379),200);
         Mouse(leherp.X, leherp.Y,10,10,True);
         Wait(42+Random(1000));
         R_FFlag(0);
         Wait(42+Random(1000));
-        WalkToTile(Tile(2954, 3379),2,0);
+        R_WalkToTile(Point(2954, 3379),2,0);
         R_FFlag(0);
         Wait(42+Random(2000));
         if InBarbahshop then
@@ -681,7 +681,7 @@ begin
   Players[CurrentPlayer].Integers[8] := R_GetSkillLevel(Skill_Defence);
   Players[CurrentPlayer].Integers[9] := R_GetSkillLevel(Skill_HP);
 
-  Players[CurrentPlayer].Integers[11] := R_GetSkillExperience(Skill_Attack) + R_GetSkillExperience(Skill_Strength) + R_GetSkillExperience(Skill_Defence) + R_GetSkillExperience(Skill_HP);
+  Players[CurrentPlayer].Integers[11] := R_GetSkillExp(Skill_Attack) + R_GetSkillExp(Skill_Strength) + R_GetSkillExp(Skill_Defence) + R_GetSkillExp(Skill_HP);
 
   if Random(5) = 0 then // No need to call it every time.
     ExitBarbah;
@@ -709,7 +709,7 @@ begin
   PreWalk := 0;
   setlength(Victims, 0);
 
-  if (DistanceFrom(Tile(3222, 3219)) < 50) then // Lumby
+  if (R_DistanceFromTile(Point(3222, 3219)) < 50) then // Lumby
   begin
     WriteLn('In Lumbridge!');
     Exit;
@@ -717,30 +717,30 @@ begin
 
   for srch := 0 to 3 do // if reflection misclicks guard so it won't wait 2 seconds
   begin
-    Victims := SortNPCs(GetNPCs('uard'));
+    Victims := R_SortNPCs(R_GetNPCs('uard',False));
     if GetArrayLength(Victims) = 0 then
     begin
       if DebugMe then WriteLn('Empty array, all guards are probably dead.');
       Wait(50+Random(50));
-      if (DistanceFrom(Tile(2965, 3394)) > 10) then
-        r_WebWalkH(Tile(2965, 3394));
+      if (R_DistanceFromTile(Point(2965, 3394)) > 10) then
+        r_WebWalkH(Point(2965, 3394));
       Exit;
     end;
-    if not TileOnMS(Victims[0].Tile, 800) then
-      if Victims[0].Tile = Tile(-1, -1) then
-        R_WebWalkH(Tile(2965, 3394)) // N. guard tile
+    if not R_TileOnMS(Victims[0].Tile, 800) then
+      if Victims[0].Tile = Point(-1, -1) then
+        R_WebWalkH(Point(2965, 3394)) // N. guard tile
       else
       if PreWalk = 1 then
         R_FFlag(0)
       else
       begin
-        WalkToTile(Victims[0].Tile,2,5+Random(5));
+        R_WalkToTile(Victims[0].Tile,2,5+Random(5));
         PreWalk := 1;
       end;
 
     begin
       try
-        P := TileToMS(Victims[0].Tile, 800);
+        P := R_TileToMS(Victims[0].Tile, 800);
       except
         WriteLn('Failed to find victim!');
         Exit;
@@ -769,8 +769,8 @@ begin
         WriteLn('Failed to find guard 90 times... Something might be bad.');
         AtkFasf := 0;
         Inc(notcooldood);
-        if (DistanceFrom(Tile(2964, 3381)) < 50) then
-          r_WebWalkH(Tile(2965, 3394));
+        if (R_DistanceFromTile(Point(2964, 3381)) < 50) then
+          r_WebWalkH(Point(2965, 3394));
         if notcooldood > 1 then
           if TabExists(Tab_Magic) then
           begin
@@ -786,7 +786,7 @@ begin
               Exit;
             end;
             Wait(15000+Random(10000));
-            if (DistanceFrom(Tile(3222, 3219)) < 50) then
+            if (R_DistanceFromTile(Point(3222, 3219)) < 50) then
             begin
               WriteLn('Back at home Lumby.');
               notcooldood := 0;
@@ -938,7 +938,7 @@ begin
   SetRun(True);
   Retaliate(True);
   if (Players[CurrentPlayer].Integers[10] < 10) then
-    Players[CurrentPlayer].Integers[10] := R_GetSkillExperience(Skill_Attack) + R_GetSkillExperience(Skill_Strength) + R_GetSkillExperience(Skill_Defence) + R_GetSkillExperience(Skill_HP);
+    Players[CurrentPlayer].Integers[10] := R_GetSkillExp(Skill_Attack) + R_GetSkillExp(Skill_Strength) + R_GetSkillExp(Skill_Defence) + R_GetSkillExp(Skill_HP);
   if TrainLowest then
   begin
     Players[CurrentPlayer].Integers[6] := R_GetSkillLevel(Skill_Attack);
@@ -1027,10 +1027,9 @@ begin
 
   Autoupdateme;
 
-  SetUpSRL;
+  SetUpReflection;
   Reincarnate := True;
   DeclarePlayers;
-  SetUpReflectionEx(True);
 
   if (SRLStats_Username = '') then
     SetupSRLStats(57, 'Anonymous', 'anon1337')
