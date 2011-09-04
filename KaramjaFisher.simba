@@ -1,6 +1,6 @@
 {///////////////////////////////////////////////////////////////////////////////
 //                                                                            //
-//                        Harry's Karamja Fisher v1.0                         //
+//                        Harry's Karamja Fisher v1.1                         //
 //                                                                            //
 //   Requirements:                                                            //
 //     Level 1 (or higher) Fishing level.                                     //
@@ -24,7 +24,7 @@
 //     Suggest something on the forums!                                       //
 //                                                                            //
 //   Known bugs:                                                              //
-//     Harpooning is buggy (http://villavu.com/forum/showthread.php?t=61742)  //
+//     Harpooning might be buggy - use with caution.                          //
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
@@ -39,6 +39,7 @@
 //    0.8 - Shouldn't click on people's names now. More Stiles failsafes.     //
 //    0.9 - Reflection update broke command.                                  //
 //    1.0 - SRL online stats, exp gained.                                     //
+//    1.1 - Reflection 2 support. Should click on player stacks less often.   //
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
@@ -85,8 +86,8 @@ const
 
   Autochecken = True; // Automatically check for updates and download the newer version of the script if it gets updated.
 
-  SRLStats_Username = ''; // Your SRL Stats Username (not RS!)
-  SRLStats_Password = ''; // Your SRL Stats Password (not RS!)
+  SRLStats_Username = ''; // Your SRL Stats Username (not RS!) - get one at http://stats.villavu.com/
+  SRLStats_Password = ''; // Your SRL Stats Password (not RS!) - get one at http://stats.villavu.com/
 
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
@@ -109,8 +110,7 @@ const
 ////////////////////////////////////////////////////////////////////////////////
 
   SCRIPT_NAME        = 'Karamja Fisher';
-  SCRIPT_VERSION     = '1.0';
-  SECRET_GOOGLE_CODE = '0DB8za5zea'; // Ignore this.
+  SCRIPT_VERSION     = '1.1';
 
 var FindFail,PlayerSessionTime,ReportTimer,FishCaughtGlobal,AntiBansGlobal,
      WorldLeaveMarker,WorldsHopped, StatsTimer : integer;
@@ -118,7 +118,7 @@ var FindFail,PlayerSessionTime,ReportTimer,FishCaughtGlobal,AntiBansGlobal,
 function NotOnDock: boolean;
 var wTile: TPoint; LagTries: integer;
 begin
-  if (DistanceFrom(Tile(2924, 3180)) > 9) then // Tile is at end of dock.
+  if (R_DistanceFromTile(Point(2924, 3180)) > 9) then // Tile is at end of dock.
   begin
     Writeln('Detected you off of dock - waiting a few seconds to know for sure.');
     Wait(4000+Random(5000));
@@ -126,7 +126,7 @@ begin
       Wait(10000+Random(5000)) // Anti-lag problems.
     else
       Wait(3000+Random(3000));
-    if (DistanceFrom(Tile(2924, 3180)) > 9) then
+    if (R_DistanceFromTile(Point(2924, 3180)) > 9) then
       Result := True
     else
       Result := False;
@@ -135,7 +135,7 @@ begin
     if Result then
     begin
       WriteLn('You probably fell off the dock - let''s walk back onto it.');
-      wTile := TileToMM(Tile(2924, 3180));
+      wTile := R_TileToMM(Point(2924, 3180));
       if not rs_OnMiniMap(wTile.X, wTile.Y) then
       begin
         WriteLn('Tile doesn''t exist, o noes! Exiting.');
@@ -149,7 +149,7 @@ begin
           Inc(LagTries);
           Mouse(wTile.x, wTile.y, 1, 1, true);
           Wait(RandomRange(3000, 5000));
-        until (LagTries > 3) or (DistanceFrom(Tile(2924, 3180)) < 7);
+        until (LagTries > 3) or (R_DistanceFromTile(Point(2924, 3180)) < 7);
         if LagTries > 3 then
         begin
           WriteLn('Could not get back onto dock, we failed.');
@@ -187,12 +187,12 @@ Var
   M, P: TPoint;
   CTRLPoints: TPointArray;
 Begin
-  P := TileToPoint(T);
+  P := T;
   Repeat
-    M := GetMyPos;
+    M := R_GetMyPos;
     CtrlPoints := r_WindPath(M.x, M.y, P.X, P.Y, 5.0, 2.5, 0.0, 0.0, 4.5, 2.5);
     For I:= High(CtrlPoints) DownTo 0 Do
-      if WalkToTile(Tile(CtrlPoints[i].x, CtrlPoints[i].y),0, 10) Then
+      if R_WalkToTile(Point(CtrlPoints[i].x, CtrlPoints[i].y),0, 10) Then
       Begin
         Result := I = High(CtrlPoints);
         R_FindRandoms;
@@ -210,7 +210,8 @@ var
 begin
   Wait(500+Random(2000));
   WriteLn('Making notes!');
-  if (not FindNPC('tiles', StileTile)) then
+  StileTile := R_GetNPCMulti(['tiles'], True);
+  if StileTile.Tile.X = -1 then
   begin
     WriteLn('Failed to find Stile! This is bad.');
     if not LoggedIn or LobbyScreen then
@@ -237,7 +238,7 @@ begin
   begin
     for srch := 0 to 3 do
     begin
-      P := TileToMS(StileTile.Tile, 614);
+      P := R_TileToMS(StileTile.Tile, 614);
       Mouse(P.X, P.Y, 5, 5, False);
       if r_WaitOption('change', 1000) then
       begin
@@ -289,7 +290,7 @@ procedure HopelesslyLost;
 begin
   if NotOnDock then
   begin
-    if (DistanceFrom(Tile(2851, 3142)) < 15) then
+    if (R_DistanceFromTile(Point(2851, 3142)) < 15) then
     begin
       WriteLn('You are at Stiles! Please start script at dock next time.');
       MakeNotes;
@@ -365,7 +366,7 @@ begin
   end;
   repeat
     wait(66)
-    if (GetAnimation > -1) then
+    if (R_GetAnimation > -1) then
       Result := true;
   until Result or (GetSystemTime > T);
 end;
@@ -384,7 +385,7 @@ begin
   AntiBan_Short;
   ClickToContinue;
   Players[CurrentPlayer].Integers[4] := R_GetSkillLevel(Skill_Fishing);
-  Players[CurrentPlayer].Integers[11] := R_GetSkillExperience(Skill_Fishing);
+  Players[CurrentPlayer].Integers[11] := R_GetSkillExp(Skill_Fishing);
 
   if WORLD_LEAVE then // Ugly, but was annoying with "True and is not needed" errors.
     if (TimeFromMark(PlayerSessionTime) > WorldLeaveMarker) then
@@ -469,20 +470,20 @@ begin
     end;
   end;
   begin
-    Pools := SortNPCs(GetNPCs(StrToInt(Players[CurrentPlayer].Strings[2])));
+    Pools := R_SortNPCs(R_GetNPCs(StrToInt(Players[CurrentPlayer].Strings[2]), False));
     begin
       if(rInFight)then exit;
       for srch := 0 to 3 do // if reflection misclicks pool so it won't wait 2 seconds
       begin
         FindFail:=0;
-        try P := TileToMS(Pools[0].Tile, 232); // Thanks to N1ke for improv!
+        try P := R_TileToMS(Pools[0].Tile, 232); // Thanks to N1ke for improv!
           except begin WriteLn('Failed to find pool!'); Exit; end;
         end;
         Mouse(P.X, P.Y, 10, 10, False);
-        Result := R_WaitOption(Players[CurrentPlayer].Strings[3], 1000);
+        Result := R_ChooseOption(Players[CurrentPlayer].Strings[3]);
         if (not Result) then
         begin
-          r_WaitOption('ancel', 500);
+          r_ChooseOption('ancel');
           Inc(FindFail);
         end
         else
@@ -500,7 +501,8 @@ begin
           if hInvFull or (not loggedIn) or LobbyScreen then Exit;
           if (TimeFromMark(FishFailsafe) > 180000) then
           begin
-            writeLn('Took too long to catch something, breaking out!')
+            writeLn('Took too long to catch something, breaking out!');
+            MakeCompass('S');
             wait(3000+Random(10000));
           end
           else
@@ -544,7 +546,7 @@ begin
       StileLoc := intToPoint(2851, 3142);
       r_WebWalkH(StileLoc);
       r_FFlag(0);
-      if (DistanceFrom(StileLoc) < 15) then
+      if (R_DistanceFromTile(StileLoc) < 15) then
       begin
         WriteLn('We are at Stile, time to make delicious notes!');
         MakeNotes;
@@ -642,7 +644,7 @@ begin
   end;
   WriteLn('<! Total anti-ban procedures run: '+ inttostr(AntiBansGlobal));
   if LoggedIn and not LobbyScreen then
-    WriteLn('<! There are '+ToStr(Length(GetAllPlayers))+' fellow botters fishing with you!');
+    WriteLn('<! There are '+ToStr(Length(R_GetAllPlayers))+' fellow botters fishing with you!');
   if WORLD_LEAVE then
     WriteLn('<! World-hop in: '+ tostr(((Worldleavemarker + PlayerSessionTime) - (GetSystemTime)) div 60000) +' minutes.');
 
@@ -679,8 +681,8 @@ begin
   SetAngle(True);
   SetRun(True);
   if (Players[CurrentPlayer].Integers[10] < 10) then
-    Players[CurrentPlayer].Integers[10] := R_GetSkillExperience(Skill_Fishing);
-
+    Players[CurrentPlayer].Integers[10] := R_GetSkillExp(Skill_Fishing);
+  MakeCompass('S');
   Wait(2000+Random(2000));
 end;
 
@@ -742,7 +744,7 @@ begin
 
   Autoupdateme;
 
-  SetUpSRL;
+  SetUpReflection;
   DeclarePlayers;
   for valid := 0 to High(Players) do
   begin
@@ -755,7 +757,6 @@ begin
       end;
     end;
   end;
-  SetUpReflectionEx(True);
 
   if (SRLStats_Username = '') then
     SetupSRLStats(36, 'Anonymous', 'anon1337')
