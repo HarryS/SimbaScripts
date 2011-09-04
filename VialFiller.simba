@@ -1,6 +1,6 @@
 ﻿{///////////////////////////////////////////////////////////////////////////////
 //                                                                            //
-//                          Harry's Vial Filler v0.4                          //
+//                          Harry's Vial Filler v0.5                          //
 //                                                                            //
 //   Requirements:                                                            //
 //     None!                                                                  //
@@ -31,6 +31,7 @@
 //    0.2 - Removal of TRSObjects due to memleaks.                            //
 //    0.3 - Better handling of no vials left and bank randoms.                //
 //    0.4 - Small object finding issue that may happen in very rare cases.    //
+//    0.5 - Should handle the "Danger Zone" if you're too low cb-lvl. Ref 2.  //
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
@@ -78,8 +79,8 @@ const
 
   Autochecken = True; // Automatically check for updates and download the newer version of the script if it gets updated.
 
-  SRLStats_Username = ''; // Your SRL Stats Username (not RS!)
-  SRLStats_Password = ''; // Your SRL Stats Password (not RS!)
+  SRLStats_Username = ''; // Your SRL Stats Username (not RS!) - get one at http://stats.villavu.com/
+  SRLStats_Password = ''; // Your SRL Stats Password (not RS!) - get one at http://stats.villavu.com/
 
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
@@ -102,42 +103,44 @@ const
 ////////////////////////////////////////////////////////////////////////////////
 
   SCRIPT_NAME        = 'Vial Filler';
-  SCRIPT_VERSION     = '0.4';
-  SECRET_GOOGLE_CODE = 'sda28934iDRE'; // Ignore this.
+  SCRIPT_VERSION     = '0.5';
 
 var PlayerSessionTime,ReportTimer,AntiBansGlobal, VialsFilledGlobal,
      WorldLeaveMarker,WorldsHopped, DethWelks, StatsTimer, AtkFasf, notcooldood : integer;
 
 Function r_WebWalkH(T: TTile): Boolean; // JuKKa
 Var
-  I: Integer;
+  I, Tm: Integer;
   M, P: TPoint;
   CTRLPoints: TPointArray;
 Begin
-  P := TileToPoint(T);
-  if DistanceFrom(P) < 3 then
+  P := T;
+  Tm := (GetSystemTime + (5 * 60000));
+  if R_DistanceFromTile(P) < 2 then
   begin
-    WriteLn('Located close enough to tile, unable to webwalk!');
+    if DebugMe then WriteLn('Located close enough to tile, unable to webwalk!');
     Exit;
   end;
   Repeat
-    M := GetMyPos;
+    M := R_GetMyPos;
     CtrlPoints := r_WindPath(M.x, M.y, P.X, P.Y, 5.0, 2.5, 0.0, 0.0, 4.5, 2.5);
     For I:= High(CtrlPoints) DownTo 0 Do
-      if WalkToTile(Tile(CtrlPoints[i].x, CtrlPoints[i].y),0, 10) Then
+      if R_WalkToTile(Point(CtrlPoints[i].x, CtrlPoints[i].y),0, 10) Then
       Begin
         Result := I = High(CtrlPoints);
         R_FindRandoms;
+        if LeaveDangerZone then
+          Wait(500+Random(2000));
         Break;
       End;
     R_FindRandoms;
-  Until( Result );
+  Until(Result or (GetSystemTime > Tm));
 End;
 
 function NotSafeZone: boolean;
 var wTile: TPoint; LagTries,ee: integer;
 begin
-  if (DistanceFrom(Tile(3253,3421)) > 35) then
+  if (R_DistanceFromTile(Point(3253,3421)) > 35) then
   begin
     Writeln('Detected you away from Varrock East - waiting a few seconds to know for sure.');
     Wait(2000+Random(5000));
@@ -145,7 +148,7 @@ begin
       Wait(10000+Random(5000)) // Anti-lag problems.
     else
       Wait(1000+Random(3000));
-    if (DistanceFrom(Tile(3253,3421)) > 35) then
+    if (R_DistanceFromTile(Point(3253,3421)) > 35) then
       Result := True
     else
       Result := False;
@@ -154,35 +157,35 @@ begin
     if Result then
     begin
       WriteLn('You probably ran away from Varrock East - let''s walk back to it.');
-      wTile := TileToMM(Tile(3253,3421));
+      wTile := R_TileToMM(Point(3253,3421));
       if not rs_OnMiniMap(wTile.X, wTile.Y) then
       begin
         WriteLn('Tile doesn''t exist, o noes! Might you be in lubmy?');
         Result := True;
-        if (DistanceFrom(Tile(3222,3219)) < 50) then
+        if (R_DistanceFromTile(Point(3222,3219)) < 50) then
         begin
           WriteLn('You are in the Lubmy area. Let''s walk back to the bank.');
           // Deathwalk stuff.
           for ee := 1 to 3 do
-            R_ClickItem(ee, True, '');
+            R_ClickItem(ee, 'Wield');
           Inc(DethWelks);
-          R_WebWalkH(Tile(3239, 3225)); // Lumby east int
+          R_WebWalkH(Point(3239, 3225)); // Lumby east int
           r_FFlag(0);
-          R_WebWalkH(Tile(3259, 3229)); // Desert border
+          R_WebWalkH(Point(3259, 3229)); // Desert border
           r_FFlag(5+Random(5)-Random(5));
-          R_WebWalkH(Tile(3238, 3283)); // North of Lumby cows
+          R_WebWalkH(Point(3238, 3283)); // North of Lumby cows
           r_FFlag(5+Random(5)-Random(5));
-          R_WebWalkH(Tile(3241, 3309)); // Cows North 2x
+          R_WebWalkH(Point(3241, 3309)); // Cows North 2x
           r_FFlag(5+Random(5)-Random(5));
-          R_WebWalkH(Tile(3298, 3357)); // SE VEM
+          R_WebWalkH(Point(3298, 3357)); // SE VEM
           r_FFlag(5+Random(5)-Random(5));
-          R_WebWalkH(Tile(3286, 3428)); // E Varrock
+          R_WebWalkH(Point(3286, 3428)); // E Varrock
           r_FFlag(5+Random(5)-Random(5));
-          R_WebWalkH(Tile(3253, 3428)); // VEB enter
+          R_WebWalkH(Point(3253, 3428)); // VEB enter
           r_FFlag(0);
           SetAngle(True);
           WriteLn('How does I reflection deathwalk? :D');
-          if (DistanceFrom(Tile(3253, 3428)) < 35) then
+          if (R_DistanceFromTile(Point(3253, 3428)) < 35) then
             Result := False
           else
             Result := True;
@@ -203,22 +206,22 @@ begin
           end;
           Wait(15000+Random(10000));
           WriteLn('(Probably) back in lumby via teleport!');
-          if (DistanceFrom(Tile(3222,3219)) < 50) then
+          if (R_DistanceFromTile(Point(3222,3219)) < 50) then
           begin
             Inc(DethWelks);
-            R_WebWalkH(Tile(3239, 3225)); // Lumby east int
+            R_WebWalkH(Point(3239, 3225)); // Lumby east int
             r_FFlag(0);
-            R_WebWalkH(Tile(3259, 3229)); // Desert border
+            R_WebWalkH(Point(3259, 3229)); // Desert border
             r_FFlag(5+Random(5)-Random(5));
-            R_WebWalkH(Tile(3238, 3283)); // North of Lumby cows
+            R_WebWalkH(Point(3238, 3283)); // North of Lumby cows
             r_FFlag(5+Random(5)-Random(5));
-            R_WebWalkH(Tile(3241, 3309)); // Cows North 2x
+            R_WebWalkH(Point(3241, 3309)); // Cows North 2x
             r_FFlag(5+Random(5)-Random(5));
-            R_WebWalkH(Tile(3298, 3357)); // SE VEM
+            R_WebWalkH(Point(3298, 3357)); // SE VEM
             r_FFlag(5+Random(5)-Random(5));
-            R_WebWalkH(Tile(3286, 3428)); // E Varrock
+            R_WebWalkH(Point(3286, 3428)); // E Varrock
             r_FFlag(5+Random(5)-Random(5));
-            R_WebWalkH(Tile(3253, 3428)); // VEB enter
+            R_WebWalkH(Point(3253, 3428)); // VEB enter
             r_FFlag(0);
             WriteLn('How does I reflection deathwalk?');
             SetAngle(True);
@@ -235,7 +238,7 @@ begin
           Inc(LagTries);
           Mouse(wTile.x, wTile.y, 1, 1, true);
           Wait(RandomRange(3000, 5000));
-        until (LagTries > 3) or (DistanceFrom(Tile(3253,3421)) < 7);
+        until (LagTries > 3) or (R_DistanceFromTile(Point(3253,3421)) < 7);
         if LagTries > 3 then
         begin
           WriteLn('Could not get back to le bank, we failed.');
@@ -340,7 +343,7 @@ begin
   end;
   repeat
     wait(66)
-    if (GetAnimation > -1) then
+    if (R_GetAnimation > -1) then
       Result := true;
   until Result or (GetSystemTime > T);
 end;
@@ -358,18 +361,18 @@ begin
   Tiles := [Point(3251,3419), Point(3252,3419), Point(3253,3419),
                   Point(3254,3419), Point(3255,3419), Point(3256,3419)];
 
-  SortTPAFrom(Tiles, GetMyPos);
-  if (DistanceFrom(Tiles[0]) > 3) or not TileOnMS(Tiles[0], 10) then
+  SortTPAFrom(Tiles, R_GetMyPos);
+  if (R_DistanceFromTile(Tiles[0]) > 3) or not R_TileOnMS(Tiles[0], 10) then
   begin
-    if not(TileOnMM(Tiles[0])) then
+    if not(R_TileOnMM(Tiles[0])) then
     begin
       SRL_Warn('R_OpenBankBooth', 'Could not find Bank Booth.', Warn_AllVersions);
       Exit;
     end;
-    WalkToTile(Tiles[0], 0, 9);
+    R_WalkToTile(Tiles[0], 0, 9);
     Wait(1+Random(42));
   end;
-  if not(TileOnMS(Tiles[0], 10)) then
+  if not(R_TileOnMS(Tiles[0], 10)) then
   begin
     MarkTime(Bwait);
     repeat
@@ -379,20 +382,20 @@ begin
         WriteLn('Tired of waiting for bank, exit!');
         Exit;
       end;
-    until (TileOnMS(Tiles[0], 10));
+    until (R_TileOnMS(Tiles[0], 10));
   end;
 
-  if (GetMyPos = Tile(3250, 3419)) or (GetMyPos = Tile(3257, 3419)) then
+  if (R_GetMyPos = Point(3250, 3419)) or (R_GetMyPos = Point(3257, 3419)) then
   begin
-    WalkToTile(Tile(3253, 3421), 1, 0);
+    R_WalkToTile(Point(3253, 3421), 1, 0);
   end;
 
   R_FindRandoms;
 
-  P := TileToMS(Tiles[0], 10);
+  P := R_TileToMS(Tiles[0], 10);
   Mouse(p.x - 7, p.y - 7, 16, 16, False);
   Wait(1+Random(42));
-  if OptionExists('ank Banker') then
+  if R_OptionExists('ank Banker') then
   begin
     R_ChooseOption('ank Banker');
     repeat
@@ -410,7 +413,7 @@ begin
       Result := R_BankScreen or R_PinScreen;
     until Result or (Tries > 10);
   end else
-  if OptionExists('se-quickly') then
+  if R_OptionExists('se-quickly') then
   begin
     R_ChooseOption('se-quickly');
     repeat
@@ -436,12 +439,12 @@ begin
   begin
     Wait(1+Random(42)+Random(42));
     WriteLn('Got the empty vials! Get to the fountain!');
-    r_WebWalkH(Tile(3239,3433));
+    r_WebWalkH(Point(3239,3433));
     //r_FFlag(8);
     Exit;
   end else
   begin
-    r_WebWalkH(Tile(3253, 3420)); // VEB bank tile.
+    r_WebWalkH(Point(3253, 3420)); // VEB bank tile.
     R_FFlag(0);
     wait(100+Random(500));
     FailTimes := 0;
@@ -449,7 +452,7 @@ begin
     repeat
       R_QuickVEB;
       Inc(FailTimes);
-      if DistanceFrom(Tile(3253, 3421)) > 20 then
+      if R_DistanceFromTile(Point(3253, 3421)) > 20 then
       begin
         WriteLn('Far away, might be random event?');
         Wait(10+Random(100));
@@ -496,7 +499,7 @@ begin
     Wait(10+Random(500));
     FixBank;
     Wait(1+Random(42));
-    if not R_WithdrawItem(229, 0) then // Empty vial 1x
+    if not R_WithdrawItem(229, True) then // Empty vial 1x
     begin
       Result := False;
       WriteLn('Failed to grab any empty vials 1x!');
@@ -508,7 +511,7 @@ begin
       Exit;
     end;
 
-    if not R_WithdrawItem(229, 0) then // Empty vial 2x
+    if not R_WithdrawItem(229, True) then // Empty vial 2x
     begin
       Result := False;
       WriteLn('Failed to grab any empty vials 2x!');
@@ -548,9 +551,9 @@ begin
   if not (FindColor(ggx, ggy, 16777215, MIX1, MIY1, MIX2, MIY2)) then
   begin
     if R_CountItem(229) > 27 then
-      R_ClickItem(1+Random(27), True, '')
+      R_ClickItem(1+Random(27), 'ial')
     else
-      R_ClickItemBy(229, True, '');
+      R_ClickItemBy(229, 'ial');
     if DebugMe then
       Writeln('Used vial.');
   end
@@ -562,7 +565,7 @@ end;
 function Moving: boolean;
 var Speed: integer;
 begin
-  Speed := GetSpeed;
+  Speed := R_GetMotion;
   if Speed < 1 then
     Result := False
   else
@@ -615,7 +618,7 @@ begin
 
   PreWalk := 0;
 
-  if (DistanceFrom(Tile(3222,3219)) < 50) then // Lumby
+  if (R_DistanceFromTile(Point(3222,3219)) < 50) then // Lumby
   begin
     WriteLn('In Lumbridge!');
     Exit;
@@ -626,24 +629,24 @@ begin
     LightUpInv;
     //Wasserbrunnen := GetObjectByID(24214, OBJECT_TYPE_INTERACTABLE, 10);
     //writeln(toStr(Wasserbrunnen));
-    P := TileToMS(Tile(3239, 3434),400);
+    P := R_TileToMS(Point(3239, 3434),400);
     if (toStr(P.X) = '-1') or (toStr(P.Y) = '-1') then
     begin
       if DebugMe then WriteLn('Empty location, fountain probably offscreen.');
       Wait(10+Random(50));
-      if (DistanceFrom(Tile(3239,3433)) > 0) then
+      if (R_DistanceFromTile(Point(3239,3433)) > 0) then
         if not Moving then
-          r_WebWalkH(Tile(3239,3433));
+          r_WebWalkH(Point(3239,3433));
       Exit;
     end;
-    if not TileOnMS(P, 600) then
-      if P = Tile(-1, -1) then
+    if not R_TileOnMS(P, 600) then
+      if P = Point(-1, -1) then
         if not Moving then
-          R_WebWalkH(Tile(3239,3433));
+          R_WebWalkH(Point(3239,3433));
 
     begin
       try
-        P := TileToMS(Tile(3239, 3434), 400);
+        P := R_TileToMS(Point(3239, 3434), 400);
       except
         WriteLn('Failed to find water!');
         Exit;
@@ -661,7 +664,7 @@ begin
       begin
         Mouse(lx,ly,0,0,False);
         Wait(1+Random(42));
-        if OptionExists('ountain') then
+        if R_OptionExists('ountain') then
           Result := True
         else
           Result := False;
@@ -674,9 +677,9 @@ begin
         WriteLn('Failed to find fountain 30 times... Something might be bad.');
         AtkFasf := 0;
         Inc(notcooldood);
-        if (DistanceFrom(Tile(3239,3433)) < 50) then
+        if (R_DistanceFromTile(Point(3239,3433)) < 50) then
           if not Moving then
-            r_WebWalkH(Tile(3239,3433));
+            r_WebWalkH(Point(3239,3433));
         if notcooldood > 1 then
           if TabExists(Tab_Magic) then
           begin
@@ -692,7 +695,7 @@ begin
               Exit;
             end;
             Wait(15000+Random(10000));
-            if (DistanceFrom(Tile(3222,3219)) < 50) then
+            if (R_DistanceFromTile(Point(3222,3219)) < 50) then
             begin
               WriteLn('Back at home Lumby.');
               notcooldood := 0;
@@ -877,10 +880,9 @@ begin
 
   Autoupdateme;
 
-  SetUpSRL;
+  SetUpReflection;
   Reincarnate := True;
   DeclarePlayers;
-  SetUpReflectionEx(True);
 
   if (SRLStats_Username = '') then
     SetupSRLStats(60, 'Anonymous', 'anon1337')
