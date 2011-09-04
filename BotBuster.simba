@@ -1,6 +1,6 @@
 {///////////////////////////////////////////////////////////////////////////////
 //                                                                            //
-//                           Harry's BotBuster v0.1                           //
+//                           Harry's BotBuster v0.2                           //
 //                                                                            //
 //   Requirements:                                                            //
 //     An account sitting at a location with a lot of low-combat-level bots.  //
@@ -22,6 +22,7 @@
 //                                                                            //
 //                              Changelog!                                    //
 //    0.1 - Initial release.                                                  //
+//    0.2 - Updated to Reflection 2.                                          //
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
@@ -49,7 +50,7 @@ begin
 
   with Players[0] do
   begin
-    Name        := 'User;
+    Name        := 'User';
     Pass        := 'Pass';
     Nick        := 'Fullname'; // IMPORTANT: Put your FULL and proper ingame name here.
     Member      := False;
@@ -95,7 +96,7 @@ const
 ////////////////////////////////////////////////////////////////////////////////
 
   SCRIPT_NAME        = 'BotBuster';
-  SCRIPT_VERSION     = '0.1';
+  SCRIPT_VERSION     = '0.2';
 
 var PlayerSessionTime,ReportTimer,AntiBansGlobal, BotsReportGlobal,
      WorldLeaveMarker, StatsTimer, ProperReport : integer;
@@ -147,7 +148,7 @@ begin
   AntiBan_Short;
   ClickToContinue;
 
-  loadsaplayers := GetAllPlayers;
+  loadsaplayers := R_GetAllPlayers;
   try
     for pp := 0 to (high(loadsaplayers)) do
     begin
@@ -291,7 +292,7 @@ begin
   if WORLD_LEAVE then
     WriteLn('<! World-hop in: '+ tostr(((Worldleavemarker + PlayerSessionTime) - (GetSystemTime)) div 60000) +' minutes.');
   if LoggedIn and not LobbyScreen then
-    WriteLn('<! There are '+ToStr(Length(GetAllPlayers))+' bots for you to report!');
+    WriteLn('<! There are '+ToStr(Length(R_GetAllPlayers))+' bots for you to report!');
 
   if (TimeFromMark(StatsTimer) > 360000) then // 6 minutes.
   begin
@@ -386,10 +387,9 @@ begin
 
   Autoupdateme;
 
-  SetUpSRL;
+  SetUpReflection;
   Reincarnate := True;
   DeclarePlayers;
-  SetUpReflectionEx(True);
   LampSkill := 'attack';
 
   if (SRLStats_Username = '') then
