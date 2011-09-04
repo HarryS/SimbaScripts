@@ -1,6 +1,6 @@
 {///////////////////////////////////////////////////////////////////////////////
 //                                                                            //
-//                         Harry's Guild Fisher v0.1                          //
+//                         Harry's Guild Fisher v0.2                          //
 //                                                                            //
 //   Requirements:                                                            //
 //     Level 76 (or higher) Fishing level.                                    //
@@ -32,6 +32,7 @@
 //                                                                            //
 //                              Changelog!                                    //
 //    0.1 - Initial release.                                                  //
+//    0.2 - Reflection 2. I don't have a P2P account, but this should work.   //
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
@@ -98,8 +99,7 @@ const
 ////////////////////////////////////////////////////////////////////////////////
 
   SCRIPT_NAME        = 'Guild Fisher';
-  SCRIPT_VERSION     = '0.1';
-  SECRET_GOOGLE_CODE = 'asZddfze234a'; // Ignore this.
+  SCRIPT_VERSION     = '0.2';
 
 var FindFail,PlayerSessionTime,ReportTimer,FishCaughtGlobal,AntiBansGlobal,
      WorldLeaveMarker,WorldsHopped : integer;
@@ -107,13 +107,13 @@ var FindFail,PlayerSessionTime,ReportTimer,FishCaughtGlobal,AntiBansGlobal,
 function NotOnDock: boolean;
 var wTile: TPoint; LagTries: integer;
 begin
-  if (DistanceFrom(Tile(2613, 3385)) < 10) then
+  if (R_DistanceFromTile(Point(2613, 3385)) < 10) then
   begin
     WriteLn('Detected you outside of the fishing guild (at gate)!');
     WriteLn('If your level is high enough, please re-enter it and log in and out a few times before re-running script.');
     TerminateScript;
   end;
-  if (DistanceFrom(Tile(2604, 3420)) > 15) then // Tile is at bottom end of North dock.
+  if (R_DistanceFromTile(Point(2604, 3420)) > 15) then // Tile is at bottom end of North dock.
   begin
     Writeln('Detected you off of dock - waiting a few seconds to know for sure.');
     Wait(4000+Random(5000));
@@ -121,7 +121,7 @@ begin
       Wait(10000+Random(5000)) // Anti-lag problems.
     else
       Wait(3000+Random(3000));
-    if (DistanceFrom(Tile(2604, 3420)) > 15) then
+    if (R_DistanceFromTile(Point(2604, 3420)) > 15) then
       Result := True
     else
       Result := False;
@@ -130,7 +130,7 @@ begin
     if Result then
     begin
       WriteLn('You probably fell off the dock - let''s walk back onto it.');
-      wTile := TileToMM(Tile(2599, 3420)); // North dock, center pos.
+      wTile := R_TileToMM(Point(2599, 3420)); // North dock, center pos.
       if not rs_OnMiniMap(wTile.X, wTile.Y) then
       begin
         WriteLn('Tile doesn''t exist, o noes! Exiting.');
@@ -144,7 +144,7 @@ begin
           Inc(LagTries);
           Mouse(wTile.x, wTile.y, 1, 1, true);
           Wait(RandomRange(3000, 5000));
-        until (LagTries > 3) or (DistanceFrom(Tile(2599, 3420)) < 7);
+        until (LagTries > 3) or (R_DistanceFromTile(Point(2599, 3420)) < 7);
         if LagTries > 3 then
         begin
           WriteLn('Could not get back onto dock, we failed.');
@@ -182,12 +182,12 @@ Var
   M, P: TPoint;
   CTRLPoints: TPointArray;
 Begin
-  P := TileToPoint(T);
+  P := T;
   Repeat
-    M := GetMyPos;
+    M := R_GetMyPos;
     CtrlPoints := r_WindPath(M.x, M.y, P.X, P.Y, 5.0, 2.5, 0.0, 0.0, 4.5, 2.5);
     For I:= High(CtrlPoints) DownTo 0 Do
-      if WalkToTile(Tile(CtrlPoints[i].x, CtrlPoints[i].y),0, 10) Then
+      if R_WalkToTile(Point(CtrlPoints[i].x, CtrlPoints[i].y),0, 10) Then
       Begin
         Result := I = High(CtrlPoints);
         R_FindRandoms;
@@ -204,12 +204,12 @@ var
   FailTimes: integer;
 begin
   Wait(500+Random(2000));
-  r_WebWalkH(Tile(2586, 3422));
+  r_WebWalkH(Point(2586, 3422));
   R_FFlag(0);
   wait(1500+Random(1000)); // Wait to stop moving.
   FailTimes := 0;
   repeat
-    R_OpenBankBooth('fishing guild');
+    R_OpenBankBooth;
     Inc(FailTimes);
   until R_BankScreen or R_PinScreen or (FailTimes > 4);
   if (FailTimes > 4) then
@@ -262,7 +262,7 @@ procedure HopelesslyLost;
 begin
   if NotOnDock then
   begin
-    if (DistanceFrom(Tile(2586, 3422)) < 5) then
+    if (R_DistanceFromTile(Point(2586, 3422)) < 5) then
     begin
       WriteLn('You are at the bank! Please start script at dock next time.');
       MakeBanks;
@@ -338,7 +338,7 @@ begin
   end;
   repeat
     wait(66)
-    if (GetAnimation > -1) then
+    if (R_GetAnimation > -1) then
       Result := true;
   until Result or (GetSystemTime > T);
 end;
@@ -371,22 +371,22 @@ begin
     end;
 
   begin
-    Pools := SortNPCs(GetNPCs(StrToInt('313')));
+    Pools := R_SortNPCs(R_GetNPCs(313, False));
     begin
       if(rInFight)then exit;
       for srch := 0 to 3 do // if reflection misclicks pool so it won't wait 2 seconds
       begin
         FindFail:=0;
-        try P := TileToMS(Pools[0].Tile, 232); // Thanks to N1ke for improv!
+        try P := R_TileToMS(Pools[0].Tile, 232); // Thanks to N1ke for improv!
           except begin WriteLn('Failed to find pool!'); Exit; end;
         end;
-        if not TileOnMS(Pools[0].Tile, Pools[0].Height) then
-          if Pools[0].Tile = Tile(-1, -1) then
+        if not R_TileOnMS(Pools[0].Tile, Pools[0].Height) then
+          if Pools[0].Tile = Point(-1, -1) then
           begin
             WriteLn('Horrible tile error, -1,-1! Break!');
             Exit;
           end else
-            WalkToTile(Pools[0].Tile,2,0);
+            R_WalkToTile(Pools[0].Tile,2,0);
         //writeln(tostr(P.X));
         //writeln(tostr(P.Y));
 
@@ -397,7 +397,7 @@ begin
         end;
 
         Mouse(P.X, P.Y, 10, 10, False);
-        Result := R_ChooseOptionSpecial('Harpoon Fishing');
+        Result := R_ChooseOption('Harpoon Fishing');
         if (not Result) then
         begin
           r_WaitOption('ancel', 500);
@@ -479,7 +479,7 @@ begin
 
   WriteLn('<! Total anti-ban procedures run: '+ inttostr(AntiBansGlobal));
   if LoggedIn and not LobbyScreen then
-    WriteLn('<! There are '+ToStr(Length(GetAllPlayers))+' fellow botters fishing with you!');
+    WriteLn('<! There are '+ToStr(Length(R_GetAllPlayers))+' fellow botters fishing with you!');
   if WORLD_LEAVE then
     WriteLn('<! World-hop in: '+ tostr(((Worldleavemarker + PlayerSessionTime) - (GetSystemTime)) div 60000) +' minutes.');
 
@@ -565,9 +565,8 @@ begin
 
   Autoupdateme;
 
-  SetUpSRL;
+  SetUpReflection;
   DeclarePlayers;
-  SetUpReflectionEx(True);
 
   MouseSpeed := MOUSE_SPEED + Random(MOUSE_SPEED_RANDOMNESS);
   SRL_Procs[srl_AntiBan] := @AntiBan_Short;
