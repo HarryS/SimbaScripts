@@ -1,6 +1,7 @@
-My Simba[1] scripts, designed for automating tasks in online games.
-Requires SRL and Reflection includes[2] (can be downloaded via the Simba
-program).
+My Simba[1] scripts, designed for automating tasks in online games. 
+Requires the SRL include[2], which can be downloaded via the Simba 
+program. The Reflection folder contains (now obsolete) Reflection 
+scripts. Main folder should continue working with just color.
 
 Notes:
 [1]: http://wizzup.org/simba/
