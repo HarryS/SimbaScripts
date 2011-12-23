@@ -1,0 +1,665 @@
+{///////////////////////////////////////////////////////////////////////////////
+//                                                                            //
+//                        Harry's Catacomb Grabber v0.4                       //
+//                                                                            //
+////////////////////////////////////////////////////////////////////////////////
+//                                                                            //
+//  Setup: Position http://i.imgur.com/hzcAk.jpg (last chamber in catacombs)  //
+//         Wear a sling + range boosting armour OR autocast your own spell.   //
+//         You MIGHT die, so do not wear anything you can't afford to lose.   //
+//         You MUST have stolen the statue at least once:                     //
+//           (grab it+kill him legit+grab statue, then it's an empty counter) //
+//         Make sure you are on lowest grafix settings+highest brightness.    //
+//        After that, you're probably good to go! Watch it a few times.       //
+//                                                                            //
+//  Good things to do: GIVE ME SOME BLOODY PROGRESS REPORTS IN THE THREAD!    //
+//                       And report any critical bugs you happen to find.     //
+//                                                                            //
+//  My to-do list: Deathwalk. don't expect this anytime soon; level your def. //
+//    Item pickup will *NEVER* be done for the public; please don't request!  //
+//                                                                            //
+////////////////////////////////////////////////////////////////////////////////
+//                                                                            //
+//  Changelog:                                                                //
+//      0.1: Initial release.                                                 //
+//      0.2: Fixed world-switching. Also added a click to walk back to the    //
+//             plinth if you get pulled off it for some reason.               //
+//      0.3: Fixes rare RS bug where monster won't attack you. Takes          //
+//             screenshots when problems in the script happen. Optional food  //
+//             eating - be warned, you may still die even with food!          //
+//      0.4: Very tiny bug fixed.                                             //
+//                                                                            //
+////////////////////////////////////////////////////////////////////////////////
+//                                                                            //
+//   Script License: WTFPL - Do What The Fuck You Want To Public License.     //
+//                                                                            //
+//      This program is free software. It comes without any warranty, to the  //
+//      extent permitted by applicable law. You can redistribute it and/or    //
+//      modify it under the terms of the Do What The Fuck You Want To Public  //
+//      License, Version 2, as published by Sam Hocevar. See                  //
+//      http://sam.zoy.org/wtfpl/COPYING for more details.                    //
+//                                                                            //
+///////////////////////////////////////////////////////////////////////////////}
+
+program HarrysCatacomber;
+{$DEFINE SMART}
+{$i SRL/SRL.scar}
+{$i SRL/SRL/Misc/Stats.simba}
+{$i SRL/SRL/Misc/PaintSmart.scar}
+
+procedure DeclarePlayers;
+begin
+  HowManyPlayers := 1;
+  CurrentPlayer := 0;
+  NumberOfPlayers(HowManyPlayers);
+
+  with Players[0] do
+  begin
+    Name        := 'Username';
+    Pass        := 'Password';
+    Member      := False;
+    Nick        := 'nick';
+    Active      := True;
+  end;
+
+end;
+
+const
+  SERVER  = 61;     // Enter "0" to pick a random server.
+  SIGNED  = True;  // Use the signed RS-client? Leave at True unless you know what you're doing.
+  MEMBERS = False; // Set to True if using a RS-Members account. False if F2P.
+  WORLD_SWITCH = True; // Switch world when connecting to RS?
+  WORLD_LEAVE = True; // Hop words every ~25 minutes or so. WORLD_SWITCH must be true.
+  TrainLowest = False; // Obsolete - Train lowest combat mode? Disable if using range/mage.
+  ClearTime = 20; // Clears debug window every X minutes.
+  EatFoods = True; // Eats lobsters if it detects your HP as being low. BETA. *YOU MAY STILL DIE*
+
+  Autochecken = True; // Automatically check for updates and download the newer version of the script if it gets updated.
+
+  SRLStats_Username = ''; // Your SRL Stats Username (not RS!) - get one at http://stats.villavu.com/
+  SRLStats_Password = ''; // Your SRL Stats Password (not RS!) - get one at http://stats.villavu.com/
+
+
+////////////////////////////////////////////////////////////////////////////////
+//                                                                            //
+//   End of Basic Setup - you may continue down more IF you know what you're  //
+//          doing. If not, you will probably break something!...              //
+//                                                                            //
+////////////////////////////////////////////////////////////////////////////////
+
+  MOUSE_SPEED              = 15;
+  MOUSE_SPEED_RANDOMNESS   = 7;
+  // Mouse speed will be "MOUSE_SPEED + Random(MOUSE_SPEED_RANDOMNESS);".
+
+  DebugMe = False; // Get advanced debugs of current procedures. Not suggested.
+
+////////////////////////////////////////////////////////////////////////////////
+//                                                                            //
+//   End of Advanced Setup - really, do NOT touch anything below this....     //
+//           or you will probably break something......... :)                 //
+//                                                                            //
+////////////////////////////////////////////////////////////////////////////////
+
+  SCRIPT_NAME        = 'Catacomb Grabber';
+  SCRIPT_VERSION     = '0.4';
+
+var PlayerSessionTime,ReportTimer,AntiBansGlobal, MonstersKilledGlobal, xxx,yyy,
+     WorldLeaveMarker, DethWelks, StatsTimer, thetries,
+     ProperLog, ReportClear, lasthpbar,tmpbarz : integer;
+
+procedure GetReadyToRespawn;
+var tmpz: integer;
+begin
+  if (GetColor(304, 27) = 12378347) then // yellow on dead screen
+  begin
+    WriteLn('Oh dear you are dead :(');
+    Wait(1000+Random(2000));
+    //MouseBox(186, 298, 330, 318, 1); // Confirm death button.
+    tmpz := 0;
+    xxx := 257-random(30)+random(30);
+    yyy := 200-random(30)+random(30);
+    Players[CurrentPlayer].Loc := 'Dead';
+    WriteLn('No deathwalk. Get more HP and anti-mage armour!');
+    RandomNextPlayer(False);
+    Exit;
+    {repeat
+      inc(tmpz)
+      Wait(1000+Random(1000));
+      if (GetColor(413, 7) <> 0) or (tmpz > 5) then // black color on background goes away when screen closed
+        Break;
+    until (tmpz > 5);} // just incase...
+  end;
+end;
+
+procedure RandomRClickH; // phantombmx/EvilChicken - removed inv clicking
+var
+  M: Byte;
+  Inv: Boolean;
+  bx,by: integer;
+begin
+  if (not LoggedIn) then exit;
+  M := MouseSpeed;
+  MouseSpeed := 7 + Random(25);
+  bx := Random(MIX2);
+  by := Random(MIY2);
+  if PointInBox(point(bx,by),pointtobox(point(MSX1,MSY1),point(msx2,msy2))) then
+  begin
+    Mouse(bx, by, 0, 0, False);
+    if (Random(3) > 0) then
+      Inv := ChooseOption('xamine');
+    if (not Inv) then ChooseOption('ancel');
+  end
+  else
+    MMouse(bx, by, 0, 0);
+  MouseSpeed := M;
+end;
+
+procedure AntiBan_Short(waitz:integer);
+begin
+  while (waitz > 0) do
+  begin
+    status(tostr(waitz));
+    case (Random(200)) of
+      0: begin RandomRClickH; Inc(Players[CurrentPlayer].Integers[2]); Inc(AntiBansGlobal); end;
+      1: begin MouseSpeed := MOUSE_SPEED + Random(MOUSE_SPEED_RANDOMNESS); Inc(Players[CurrentPlayer].Integers[2]); Inc(AntiBansGlobal); end;
+      2: begin PickUpMouse; Inc(Players[CurrentPlayer].Integers[2]); Inc(AntiBansGlobal); end;
+      3..200: begin
+        wait(1);
+      end;
+    end;
+    Wait(100+random(500));
+    waitz:=waitz-(100+random(500));
+  end;
+end;
+
+procedure CheckPowerLevels;
+begin
+  if not LoggedIn or LobbyScreen then
+    Exit;
+  {if TrainLowest then
+  begin
+    Players[CurrentPlayer].Integers[6] := GetSkillLevel(Skill_Attack);
+    Players[CurrentPlayer].Integers[7] := GetSkillLevel(Skill_Strength);
+    Players[CurrentPlayer].Integers[8] := GetSkillLevel(Skill_Defence);
+    if Players[CurrentPlayer].Integers[7] < Players[CurrentPlayer].Integers[6] then
+    begin  // Borrowed some logic from Tarajunky
+      if Players[CurrentPlayer].Integers[8] < Players[CurrentPlayer].Integers[7] then
+        SetFightMode(4)
+      else
+        SetFightMode(2);
+    end else
+    begin
+      if Players[CurrentPlayer].Integers[8] < Players[CurrentPlayer].Integers[6] then
+        SetFightMode(4)
+      else
+        SetFightMode(1);
+    end;
+  end;}
+end;
+
+Function nInFight: Boolean; // Narcle!
+var
+  T: TPoint;
+  H, I: integer;
+  ATPA: T2DPointArray;
+  FightBarColors: TIntegerArray;
+  InFightBox: TBox;
+begin
+  InFightBox := IntToBox(224, 115, 294, 150);
+  FightBarColors := [10240, 9728, 132923];
+  H := High(FightBarColors);
+  SetArrayLength(ATPA, H+1);
+  T := MiddleBox(InFightBox);
+  for i := 0 to H do
+    with InFightBox do
+    FindColorsSpiralTolerance(T.x, T.y, ATPA[i], FightBarColors[i], X1, Y1, X2, Y2, 0);
+  Result := InRange(Length(MergeATPA(ATPA)), 30, 240);
+  if Result then
+  begin
+    MarkTime(lasthpbar);
+    tmpbarz := 0;
+  end;
+  //writeln(result);
+end;
+
+function FindObjTPAH(var X, Y: Integer; Color, Tol, CTS, ObjWidth, ObjHeight, minCount: Integer; UpText: TStringArray): Boolean; // Wizzup!?
+var
+  I, tCTS: Integer;
+  myPoint: TPoint;
+  Points: TPointArray;
+  aPoints: T2DPointArray;
+begin
+  Result := False;
+  if not LoggedIn then exit;
+  tCTS := GetColorToleranceSpeed;
+  CTS := Integer(CTS * 9 mod 3 <> 0);
+  ColorToleranceSpeed(CTS);
+  FindColorsSpiralTolerance(X, Y, Points, Color, MSX1, MSY1, MSX2, MSY2, Tol);
+  if Length(Points) = 0 then
+  begin
+    ColorToleranceSpeed(tCTS);
+    Exit;
+  end;
+  ColorToleranceSpeed(1);
+  aPoints := TPAtoATPAEx(Points, ObjWidth, ObjHeight);
+  SetLength(Points, 0);
+  for I := 0 to High(aPoints) do
+  begin
+    if Length(aPoints[i]) < minCount then
+      Continue;
+    myPoint := MiddleTPA(aPoints[i]);
+    MMouse(myPoint.X-random(5)+random(5), myPoint.Y-random(5)+random(5), 0, 0);
+    if WaitUpTextMulti(UpText, 300) then
+    begin
+      GetMousePos(X, Y);
+      Result := True;
+      ColorToleranceSpeed(tCTS);
+      Exit;
+    end;
+  end;
+  ColorToleranceSpeed(tCTS);
+end;
+
+function HGetXPBarTotal: LongInt; // Narcle + Icefire
+var
+  Previous: Boolean;
+  TPA: TPointArray;
+  B: TBox;
+  {$IFNDEF Simba}
+  P: TPoint;
+  {$ENDIF}
+begin
+  Previous := IsXPBarOpen;
+  if (ToggleXPBar(True)) then
+    WaitFunc(@IsXPBarOpen, 10, 1500);
+  FindColorsTolerance(TPA, clWhite, 342, 55, 510, 69, 1);
+  B := GetTPABounds(TPA);
+  B := IntToBox(B.X1 - 2, B.Y1 - 2, B.X2 + 2, B.Y2 + 2);
+  {$IFDEF Simba}
+    Result := StrToIntDef(ExtractFromStr(GetTextAtExWrap(B.X1, B.Y1, B.X2, B.Y2,
+                                0, 5, 4, clWhite, 0, 'XPChars'), Numbers), 0);
+  {$ELSE}
+    IsTextInAreaEx(B.X1, B.Y1, B.X2, B.Y2, P.X, P.Y, 'XP', 0, XPChars, False, False, 0, 1, clWhite);
+    Result := StrToIntDef(GetNumbers(GetTextAtEx(P.X, P.Y, 1, XPChars, False, False, 0, 2, clWhite, 60, False, tr_AllChars)), 0);
+  {$ENDIF}
+  if (not (Previous)) then
+    Wait(RandomRange(500, 1500));
+  //ToggleXPBar(Previous);
+end;
+
+procedure EatSnacks;
+var chen,ex,ey: integer;
+begin
+  if Players[CurrentPlayer].Integers[86] = 1488 then // no food left
+    Exit;
+  for chen := 1 to 28 do
+  begin
+    if ExistsItem(chen) then
+    begin
+      MMouseItem(chen);
+      if IsUpText('Eat ') then
+      begin
+        WriteLn('Eating foodstuffs in slot '+tostr(chen)+'!');
+        GetMousePos(ex,ey);
+        Mouse(ex,ey,0,0,True);
+        Antiban_Short(1000+Random(1000));
+        if ExistsItem(chen) then
+          Wait(1000+Random(1000));
+        stats_IncVariable('Lobster Eaten',1); // most generic var name on stats sadly
+        Exit;
+      end;
+    end;
+  end;
+  Players[CurrentPlayer].Integers[86] := 1488; // this will only happen if inv is empty / not matching uptext
+  WriteLn('Your inv doesn''t have any food in it / it doesn''t match "Eat" uptext.');
+  WriteLn('Feel free to put some food in your inv and it will be eaten at Red/Orange HP!');
+end;
+
+procedure KeepHealthy;
+var somerandomvar: integer; current: string;
+begin
+  if not EatFoods then
+    Exit;
+  current := 'whee';
+  somerandomvar := GetMMLevels('hp',current);
+  case current of
+    'Red','Orange': EatSnacks;
+  end;
+end;
+
+function FindVictim: Boolean;
+var breakingthefight,expz,recentone: integer;
+begin
+  Result := False;
+  if not loggedin then
+    Exit;
+
+  if WORLD_LEAVE then
+    if (TimeFromMark(PlayerSessionTime) > WorldLeaveMarker) then
+    begin
+      WriteLn('Time''s up! Switching world.');
+      if HowManyPlayers = 1 then
+        ChangeWorld(RandomWorld(Players[CurrentPlayer].Member, False))
+      else
+        RandomNextPlayer(True);
+    end;
+  Inc(thetries);
+  if (xxx < 150) or (xxx < 150) then
+  begin
+    WriteLn('recalibrated xxx,yyy coords');
+    xxx := 257-random(30)+random(30);
+    yyy := 200-random(30)+random(30);
+  end;
+  GetReadyToRespawn;
+  expz:=HGetXPBarTotal;
+  if isuptext('ouch P') or findobjtpah(xxx,yyy,8556439, 5, 1, 30, 30, 1, ['ouch P']) then // touch the pie!
+  begin
+    Inc(MonstersKilledGlobal);
+    IncEx(Players[CurrentPlayer].Integers[69],133);
+    stats_IncVariable('Total EXP Gained', 133);
+    stats_IncVariable('Monsters Killed', 1);
+    getmousepos(xxx,yyy);
+    mouse(xxx,yyy,0,0,true);
+    thetries := 0;
+    Result := True;
+    SMART_DrawBox(inttobox(xxx-15,yyy-15,xxx+15,yyy+15));
+    antiban_short(5000+Random(3000));
+    breakingthefight := 0;
+    repeat
+      inc(breakingthefight);
+      antiban_short(100+Random(500));
+      GetReadyToRespawn;
+      findnormalrandoms;
+      recentone := (HGetXPBarTotal-expz);
+      if (recentone>=133) and (recentone<=5000) then // make sure no false detection
+      begin
+        writeLn('You (probably) killed it, 133 exp for you!');
+        break;
+      end;
+      if (TimeFromMark(lasthpbar) > 60000) then
+      begin
+        if (tmpbarz > 1) then
+        begin
+          TakeScreen('StillNoHPBar');
+          Writeln('No HP bar after switching worlds... going to kill your player, sorry!');
+          Players[CurrentPlayer].Loc := 'NoHPBar';
+          RandomNextPlayer(False);
+          Exit;
+        end
+        else
+        begin
+          TakeScreen('NoHPBar');
+          inc(tmpbarz);
+          WriteLn('No HP Bar for over over a minute, something might be wrong!');
+          Writeln('Reconnecting just in case.');
+          Logout;
+          Wait(1000+Random(4000));
+          LoginPlayer;
+          Exit;
+        end;
+      end;
+      if not nInFight then Break;
+      KeepHealthy;
+    until (breakingthefight > 150); // I dunno, about 50 sec?
+    if (breakingthefight > 150) then
+      WriteLn('We took quite a bit to kill him, something might be wrong...');
+    antiban_short(100+random(2488));
+    Exit;
+  end;
+  wait(500+random(2000));
+  if(thetries = 2)or(thetries = 10)or(thetries=20)then
+  begin
+    TakeScreen('MiniMapClick');
+    Writeln('you maybe moved away? clicking minimap.');
+    mousebox(647,107,676,138,1);
+    antiban_short(100);
+    flag;
+  end;
+  if(thetries > 30)then
+  begin
+    TakeScreen('NoObj');
+    writeln('no object 30 times, your player is a bit broken...');
+    thetries := 0;
+    Players[CurrentPlayer].Loc := 'NoObj';
+    RandomNextplayer(False);
+    Exit;
+  end;
+  writeln('No object found; did you steal the statue yet? You MUST have stolen the statue off the platter before running script!');
+  writeln('Make sure you stand next to it. Also make sure you''re on lowest grafix settings+highest brightness.');
+
+end;
+
+procedure PrintReports;
+var
+  QC: array [0..1] of TStringArray; // Query = 0, Counter = 1.
+  I, II: Byte;
+begin
+  if (TimeFromMark(ReportClear) > ClearTime*60000) then
+  begin
+    ClearDebug;
+    MarkTime(ReportClear);
+  end;
+  WriteLn('[REPORT]');
+  SRLRandomsReport;
+  WriteLn('');
+
+  for II := 0 to 1 do
+    SetArrayLength(QC[II], 4);
+
+  QC[0] := ['Total runtime:',
+    'Players active:',
+    'Monsters killed:',
+    '-> Monsters killed per hour:'];
+  QC[1] := [TimeRunning,
+    ToStr(PlayersActive) + ' out of ' + ToStr(HowManyPlayers),
+    ToStr(MonstersKilledGlobal),
+    ToStr((3600 * (MonstersKilledGlobal)) div (GetTimeRunning div 1000 + 1))];
+
+  WriteLn('<!---');
+  WriteLn('<! ' + Padr('Harry''s ' + SCRIPT_NAME, 35) + 'v' + SCRIPT_VERSION);
+  WriteLn('<!---');
+
+  II := High(QC[0]);
+  for I := 0 to II do
+    WriteLn('<! ' + Padr(QC[0][I], 32) + QC[1][I]);
+
+  WriteLn('<!---');
+  WriteLn('<! ## | Nick | A | CB. | ExpGain/Hr: | Rand:')
+
+  for I := 0 to HowManyPlayers - 1 do
+    WriteLn('<! ' + Padr(ToStr(I),                                 3) +
+      '| ' + Padr(Copy(Players[I].Nick, 1, 4),                     5) +
+      '| ' + Padr(ToStr(Players[I].Active)[1],                     2) +
+      '| ' + Padr(ToStr(Players[I].Integers[44]), 4) +
+      '| ' + Padr(ToStr(Players[I].Integers[69])+'/'+ToStr((3600 * (Players[I].Integers[69])) div (GetTimeRunning div 1000 + 1)),12) +
+      '| ' + Players[I].Rand);
+
+  WriteLn('<! Total anti-ban procedures run: '+ inttostr(AntiBansGlobal));
+  if WORLD_LEAVE then
+    WriteLn('<! World-hop in: '+ tostr(((Worldleavemarker + PlayerSessionTime) - (GetSystemTime)) div 60000) +' minutes.');
+  if DethWelks > 0 then
+    WriteLn('<! Death-walked '+toStr(DethWelks)+' times.');
+
+  if (TimeFromMark(StatsTimer) > 360000) then // 6 minutes.
+  begin
+    Stats_Commit;
+    MarkTime(StatsTimer);
+    WriteLn('<! Sent stats in!');
+  end;
+
+  if (SRLStats_Username = '') then
+    WriteLn('<! Please consider getting your own stats username @ http://stats.villavu.com');
+
+  WriteLn('<!---');
+  WriteLn('[/REPORT]');
+end;
+
+procedure Player_OnLogIn;
+begin
+  Wait(1000+Random(2000));
+  if (FindNormalRandoms) then
+    if (not Players[CurrentPlayer].Active) then
+    begin
+      WriteLn('Player is in a random.');
+      LogOut;
+      Players[CurrentPlayer].Active := False;
+      Players[CurrentPlayer].Status := 'InRandom';
+      Exit;
+    end;
+
+  CheckPowerLevels;
+  MarkTime(PlayerSessionTime);
+  MarkTime(lasthpbar);
+  WorldLeaveMarker := (2100000 + Random(1500000) - Random(1500000)); // 2100000 ms = 35 minutes. 1500000 ms = 25 minutes. Add and subtract the 25 minutes from 35 giving a huge change of randomness for world-switching.
+  //Writeln(tostr(worldleavemarker));
+  ClickNorth(True);
+  SetRun(True);
+  Retaliate(True);
+  Players[CurrentPlayer].Integers[44]:=GetCombatLevel;
+  if (Players[CurrentPlayer].Integers[44] < 20) and (Players[CurrentPlayer].Integers[44] > 2) then
+  begin
+    WriteLn('/!\ ACHTUNG! /!\');
+    WriteLn('Your combat level is low, so you will probably die a lot.');
+    WriteLn('Be warned, your exp/hr will be low due to this (and no deathwalk yet)!');
+  end;
+  if (GetColor(433, 499) = 65280) then // assist on
+  begin
+    MouseBox(412, 485, 452, 497, 2);
+    Wait(10+Random(100));
+    ChooseOption('Off');
+  end;
+end;
+
+procedure Autoupdateme;
+var ClientUp, Neifile:integer;
+    OnlineVersion, NewScript, NeiFeilNennen:string;
+begin
+  if Autochecken then
+  begin
+    writeln('Checking for script updates...');
+    ClientUp := InitializeHTTPClient(False, False);
+    SetHTTPUserAgent(ClientUp,'Simba ' + SCRIPT_VERSION);
+    OnlineVersion := GetHTTPPage(ClientUp,'http://harry.lu/srl/catacomb-version.txt');
+    writeln(onlineversion);
+    writeln(script_version)
+    FreeHTTPClient(ClientUp);
+    if (Length(trim(OnlineVersion)) = 3) and (trim(OnlineVersion) > SCRIPT_VERSION) then
+    begin
+      writeLn('Newer script version online!');
+      writeLn('Autoupdating to newer version.');
+      ClientUp := InitializeHTTPClient(False,False);
+      SetHTTPUserAgent(ClientUp,'Simba');
+      NewScript := GetHTTPPage(ClientUp,'http://harry.lu/srl/catacomb-current.txt');
+      FreeHTTPClient(ClientUp);
+
+      NeiFeilNennen := AppPath + SCRIPT_NAME + ' v'+trim(OnlineVersion)+' [Pub] by Harry.simba';
+      Neifile := Rewritefile(NeiFeilNennen, true);
+      try
+        WriteFileString(Neifile, NewScript);
+      except
+        begin
+          writeLn('Fatal error writing to '+NeiFeilNennen+'!!');
+          terminatescript;
+        end;
+      end;
+      CloseFile(Neifile);
+      writeLn('New script downloaded and saved at '+NeiFeilNennen+' !! Please use this!');
+      TerminateScript;
+    end else
+    begin
+      if (Length(trim(OnlineVersion)) <> 3) then
+        WriteLn('Version checking failed (debug: length was not equal), you might be outdated.')
+        else writeLn('You have the latest version of the script!');
+      exit;
+    end;
+  end else
+    WriteLn('!!!!! Not checking for latest version, you may be outdated!');
+end;
+
+procedure SetUpScript;
+var
+  i,xxx,yyy: Integer;
+begin
+  ClearDebug;
+
+  Smart_Server := SERVER;
+  Smart_Signed := SIGNED;
+  Smart_Members:= MEMBERS;
+
+  Autoupdateme;
+
+  SetupSRL;
+  Reincarnate := True;
+  DeclarePlayers;
+  LampSkill := 'hitpoints';
+
+  if (SRLStats_Username = '') then
+    SetupSRLStats(354, 'Anonymous', 'anon1337')
+  else
+    SetupSRLStats(354, SRLStats_Username, SRLStats_Password);
+
+  MouseSpeed := MOUSE_SPEED + Random(MOUSE_SPEED_RANDOMNESS);
+  SRL_Procs[srl_OnLogIn] := @Player_OnLogIn;
+
+  for i := 0 to High(Players) do
+  begin
+    if (WORLD_SWITCH) then
+      Players[i].WorldInfo := [Players[i].Member, -1, False];
+    Players[i].Integers[4] := 1;
+  end;
+
+  CurrentPlayer := RandomPlayerIndex;
+  ActivateClient;
+  MarkTime(ProperLog);
+  MarkTime(ReportClear);
+  MarkTime(lasthpbar);
+  xxx := 257-random(30)+random(30);
+  yyy := 200-random(30)+random(30);
+  Wait(1000 + Random(2000));
+ { repeat
+
+  findvictim;
+
+  wait(2000+random(3000));
+  until false;}
+end;
+
+procedure MainLoop;
+begin
+  CurrentPlayer := RandomPlayerIndex;
+  LogInPlayer;
+
+  repeat
+    repeat
+      if (TimeFromMark(ReportTimer) > 60000) then // 1 minute
+      begin
+        PrintReports;
+        MarkTime(ReportTimer);
+      end;
+      FindVictim;
+      if (not LoggedIn) then
+      begin
+        WriteLn('Not logged in?');
+        mmouse(random(msx2),random(msy2),0,0);
+        Wait(500+Random(1000));
+        if (not LoggedIn) then Break else Wait(1);
+      end;
+      if LobbyScreen then
+      begin
+        WriteLn('At lobby screen?');
+        Wait(500+Random(1000));
+        if (LobbyScreen) then Break else Wait(1);
+      end;
+    until(False);
+    if LobbyScreen then
+      LeaveLobby;
+
+    WriteLn('Detected as logged out, NPlayer');
+    RandomNextPlayer(Players[CurrentPlayer].Active);
+  until False;
+end;
+
+begin
+  SetUpScript;
+  MainLoop;
+end.
