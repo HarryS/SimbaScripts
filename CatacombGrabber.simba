@@ -1,6 +1,6 @@
 {///////////////////////////////////////////////////////////////////////////////
 //                                                                            //
-//                        Harry's Catacomb Grabber v0.4                       //
+//                        Harry's Catacomb Grabber v0.5                       //
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
@@ -15,8 +15,8 @@
 //  Good things to do: GIVE ME SOME BLOODY PROGRESS REPORTS IN THE THREAD!    //
 //                       And report any critical bugs you happen to find.     //
 //                                                                            //
-//  My to-do list: Deathwalk. don't expect this anytime soon; level your def. //
-//    Item pickup will *NEVER* be done for the public; please don't request!  //
+//  My to-do list: None!  Item pickup will probably never be done for         //
+//    the public due to goldfarming scumbags; please don't request for it!    //
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
@@ -28,6 +28,11 @@
 //             screenshots when problems in the script happen. Optional food  //
 //             eating - be warned, you may still die even with food!          //
 //      0.4: Very tiny bug fixed.                                             //
+//      0.5: Large update! Deathwalk and improved object finding,             //
+//             all thanks to DemiseScythe's awesome DTMs! Script will also    //
+//             set the highest FPS for the RS client, says current status in  //
+//             status section (under debug box), and some small bug fixes.    //
+//             Overall should attack much quicker, giving more exp/hr!        //
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
@@ -48,9 +53,10 @@ program HarrysCatacomber;
 {$i SRL/SRL/Misc/PaintSmart.scar}
 
 procedure DeclarePlayers;
+var i: integer;
 begin
   HowManyPlayers := 1;
-  CurrentPlayer := 0;
+  CurrentPlayer := Random(HowManyPlayers);
   NumberOfPlayers(HowManyPlayers);
 
   with Players[0] do
@@ -70,9 +76,10 @@ const
   MEMBERS = False; // Set to True if using a RS-Members account. False if F2P.
   WORLD_SWITCH = True; // Switch world when connecting to RS?
   WORLD_LEAVE = True; // Hop words every ~25 minutes or so. WORLD_SWITCH must be true.
-  TrainLowest = False; // Obsolete - Train lowest combat mode? Disable if using range/mage.
+  TrainLowest = False; // Train lowest combat mode? Disable(set to False) if using range/mage.
   ClearTime = 20; // Clears debug window every X minutes.
   EatFoods = True; // Eats lobsters if it detects your HP as being low. BETA. *YOU MAY STILL DIE*
+  GetScreenies = True; // Take screenies when stuff that might be interesting happen. These are useful for me if you get a bug, so please leave enabled!
 
   Autochecken = True; // Automatically check for updates and download the newer version of the script if it gets updated.
 
@@ -101,33 +108,331 @@ const
 ////////////////////////////////////////////////////////////////////////////////
 
   SCRIPT_NAME        = 'Catacomb Grabber';
-  SCRIPT_VERSION     = '0.4';
+  SCRIPT_VERSION     = '0.5';
 
 var PlayerSessionTime,ReportTimer,AntiBansGlobal, MonstersKilledGlobal, xxx,yyy,
-     WorldLeaveMarker, DethWelks, StatsTimer, thetries,
-     ProperLog, ReportClear, lasthpbar,tmpbarz : integer;
+     WorldLeaveMarker, DethWelks, StatsTimer, thetries, YesS,NoS, DTMFsf,
+     ProperLog, ReportClear, lasthpbar,tmpbarz : integer; aFound: Extended;
 
-procedure GetReadyToRespawn;
-var tmpz: integer;
+function FindDTMRotatedFailSafe(DTM: Integer; var x, y: Integer; x1, y1, x2, y2: Integer; sAngle, eAngle, aStep: Extended; out aFound: Extended): boolean;
+begin;
+  result := FindDTMRotatedAlternating(DTM,x,y,x1,y1,x2,y2,sangle,eangle,astep,afound);
+  if (Result) then
+  begin
+    MarkTime(DTMFsf);
+    Exit;
+  end;
+  if not LoggedIn then
+    Result := True;
+  if (Result) then
+  begin
+    WriteLn('Detected as logged out ... try again in a sec.');
+    Wait(1000+Random(2000));
+    if not LoggedIn then
+    begin
+      WriteLn('You logged out somehow, something is probably wrong, bye!');
+      Logout;
+      LeaveLobby;
+      Exit;
+    end else
+    begin
+      Result := False;
+      WriteLn('You are still logged in, false alarm...');
+      Exit;
+    end;
+  end;
+  Result := (TimeFromMark(DTMFsf) > 60000);
+  if (Result) then
+  begin
+    WriteLn('1 minute without finding DTM, something is wrong...');
+    Logout;
+    LeaveLobby;
+    Exit;
+  end;
+end;
+
+function DoDeathWalk: string;
+var
+  xz, yz: Integer;
+  Q: Array [0..10] of Integer;
+  K: Array [0..2] of Integer;
 begin
-  if (GetColor(304, 27) = 12378347) then // yellow on dead screen
+  Result := 'NotWalked';
+  Q[0] := DTMFromString('mrAAAAHic42BgYJjGxMDQCMQJQJwHxClAnAHE84A4EojlgWpsgdgeiGWAWAOI/YA4AIgVgTg8MIShu7mVYVJXD5jt7qzDYG2kxeACpEF8fqAafJiRAIYBAA2ADg4=');
+  Q[1] := DTMFromString('mggAAAHicY2NgYHAAYicgFmKAAFYgNgRiJiBOAGJtIBYGYk6ofFK8C4OTtyaDupYKg6uTIUNodAiDtZ0BAz9QDhtmxIEhAADk3gZv');
+  Q[2] := DTMFromString('mEQIAAHicvc0hC8JgAITh07AqYloy6C8YqFgsuuoMDjRvujSzbKJ1KIhBxGS1LG34/3wHXzXOg6ccHGdLejelIwp8jCdOSHDFBSVyvEyXIoKHCQZwMMQUC4Q4oM+PjxFmWGKDEC4cdLHFHhluuOOBs+mrzRxj9GCjgzbWK0+7OJBlqTYt1a/xBz/zBS0rGTg=');
+  Q[3] := DTMFromString('mOwIAAHicvc2xCwEBFMfx3/EHyGKxUQalxEKKW5TrCJckm4FwGQ23yCJF6WYl+Qf4F32HN9vcq0/vvXq9X17SIyV18MIHb9xxtvmJm+1X7DGBhyaqqJkp+ta7uOCImf0vkHdCGw0EGMDDAgfEiLBEFjmUUEcPc6zs3kcFLRRRhmt3u3CrcLPWeDiSo/RfZchLipOgH/UF2/YZmg==');
+  Q[4] := DTMFromString('mOwIAAHicvc8hC8JgFIXhO+0bWAwWly1LGhfWRbbxaRgTwbKgYwiGCRYHS5ahrCxZLJb9w73Cl23uwgOnHA53IiKHgUiGIyL4OOOGGi980GpvNLgjR6J7DhbwsEKIAHukKGCxl2GmjWFihCkceFBIcEWJCg88dV5iDhsuYpxwQY41dttYNkqJIcO/+/7VF6NHP64DlNkZew==');
+  Q[5] := DTMFromString('mpAIAAHicxc4tC8JgFIbho/sBGsSyYhKDggg6sLxlSVAG4kczDBZmMwwERfzAMQSLFqMggkX0H3qH043vgSs8h+fAqYjIIy9yxAYHjNCDQQctNNFGFz4C7U0xwRB9rLDGDS988cEbT9xxRYY9EtT5oYEyiijBRQ0efIwRIcEOZ2wxw0B7Vc0BjO6M5hBLvT3hghQLzONQHEesKYhdOcv+zQ9aQhyL');
+  Q[6] := DTMFromString('mjwIAAHicxc8hC8JwEMbh28A8FMQkSxYF04qwYraMDQwWmQhzsDUNW1zXYdjKyhCMfgC/nT/hgs34P3jCG+5ezhWRty3yQo87KpxxxBYbrBEgwg4JClzRqQYtnnigxgWx7oXw9N43p9jTv4SLMUZwMMQEU8ywgI8I8x8rBIiRokCFG1pVo0SCEzIckOeZWPbACEf/NMEy6M98ANJvG+A=');
+  Q[7] := DTMFromString('mDQMAAHiczc49C0EBFMbx45ZZwiRZMGKwYJMwyEvKTVK3KKEbGZhuhrvIoJgoshikDAbfz1+dD2C8p3516jk9naSIfAyRO/bYwIaFFproooIcssiggDLq6GEKRzuueOCtvRfNfjcd1GBiiCVcHHDDC08M+KsPGyss1AgmSmigDQszrOFihyPOOOm+haN9VeQRRwJpRBFBCEGEEUNK8yLmk7H4xfCUAH95jc+D/pov2PwhtA==');
+  Q[8] := DTMFromString('mjwIAAHicxc0ha0JhGAXgT/0BKhgEQaMICwaXhBWxGRQWhiAsqBiurKhhJm0GFYTBMLlh0ubC/p7P4PbF+8JT3sPhVEIIu3QIZ04c+ObCnnfGvNJnQMSSDZ98ceWHX25xp0uDKbO490KHJx7/9uyvmTPkmRYP1GhSp0SOPAWKlKnGeZs+ET1GTFiw58gHW1bx/20ahVTIJCJrPympBP1zd/VoHQQ=');
+  Q[9] := DTMFromString('mzgIAAHiczc69CwEBGMfx5/gDbBZlEMqElJOBupTlFi+DUkqynpcYRLId7koUNgarUf4+3/LsRvfUp55+z9PTkxCRd0jkAB8uFtjhggeeeOl8gxm66KCNofY2qjCRQx4FlDSvo4E+pvBwwwl3DPilhRpMJBFFDClkUYaDJVbowUYRacR1P6OZhaZ8b4+xxhZHXNUZe8xRwWTkiCHhv4vwSxAYAfG7PnS8Hjc=');
+  Q[10] := DTMFromString('mpAIAAHicxc6xCwFxGMbxl7qMihuUgcWmrkuWG5SIMmIwGO46udIlJkkZlMFgoa6bKZuSv9D36t2Nv7c+9dbz1PvWReSbF3nihhdSXHDGFnOMMEQfE4SaZZ07Hnhrr4MWPAwwRYQDEr3xwQ5j9PihDQ9LBJihC0dleRM1VFBGCTaqaMCFj5Xa44QrUiS6H7HGBjGihS8FyzKmyA8m5Qz7Nz9t6x4V');
+  K[0] := DTMFromString('mWAAAAHicY2FgYPgIxKeAWJyRgUEEiG2BbBEg5gfiVCDm5eVlKCrIZWiqr2GIDPQFiyNjRjQMAgB+Dgbc');
+  K[1] := DTMFromString('mlwAAAHicY2dgYLgGxPuA+D2UfQWIZwGxPCMDgzgQswExCxBzAfFboLgskJYGYj5eXob2hlKG1voShpvn9jBMm9wEFgNhfqA6XJgRD4YCAJYuDi8=');
+  K[2] := DTMFromString('mrAAAAHic42BgYGBlZGBgAeJfQDY3kGZGw6pALAfEEkAsxghRwwDE34DUayD28XRk4OPjBdN+3s4MoYGeDHFRgQwpCeEMNeXZDPxANfgwIwEMAwBPpgsv');
+  try
+    MouseSpeed := 18;
+    MakeCompass('e');
+    SetAngle(True);
+    SetRun(True);
+    Mouse(626, 60, 3, 3, True);
+    FFlag(6);
+    Writeln('Beginning Deathwalk by DemiseScythe');
+    MarkTime(DTMFsf);
+    if FindDTMRotatedFailSafe(Q[0], xz, yz, MMX1, MMY1, MMX2, MMY2, -Pi/4, Pi/4, Pi/60, aFound) and LoggedIn then
+    begin
+      WriteLn('Q0');
+      Mouse(xz, yz, 0, 0, True);
+      FFlag(6);
+    end else
+    begin
+      WriteLn('We didn''t get out of Lumby, probably...');
+      Result := 'FailLumb';
+      Exit;
+    end;
+    repeat
+      Wait(50 + Random(25));
+    until FindDTMRotatedFailSafe(Q[1], xz, yz, MMX1, MMY1, MMX2, MMY2, -Pi/4, Pi/4, Pi/60, aFound);
+    if not LoggedIn then Exit;
+    if FindDTMRotatedFailSafe(Q[1], xz, yz, MMX1, MMY1, MMX2, MMY2, -Pi/4, Pi/4, Pi/60, aFound) then
+    begin
+      WriteLn('Q1');
+      Mouse((xz+3), (yz+8), 0, 0, True);
+      wait(700+Random(1000));
+      FFlag(0);
+      wait(700+Random(1000));
+    end;
+    repeat
+      Wait(50 + Random(25));
+    until FindDTMRotatedFailSafe(K[0], xz, yz, MSX1, MSY1, MSX2, MSY2, -Pi/4, Pi/4, Pi/60, aFound);
+    if not LoggedIn then Exit;
+    if FindDTMRotatedFailSafe(K[0], xz, yz, MSX1, MSY1, MSX2, MSY2, -Pi, Pi, Pi/30, aFound) then
+    begin
+      WriteLn('K0');
+      Mouse(xz, yz, 3, 3, True);
+      if FindDTMRotatedFailSafe(K[0], xz, yz, MSX1, MSY1, MSX2, MSY2, -Pi, Pi, Pi/30, aFound) then
+      begin
+        Mouse(xz, yz, 3, 3, True);
+      end;
+    end;
+    repeat
+      Wait(50 + Random(25));
+      if ClickToContinue then
+      begin
+        WriteLn('Xenia is probably talking to you, did you do the Blood Pact quest?');
+        TakeScreen('ClickToContinue');
+        Players[CurrentPlayer].Loc := 'NoQuest';
+        RandomNextPlayer(False);
+      end;
+    until FindDTMRotatedFailSafe(K[1], xz, yz, MSX1, MSY1, MSX2, MSY2, -Pi/4, Pi/4, Pi/60, aFound);
+    if not LoggedIn then Exit;
+    if FindDTMRotatedFailSafe(K[1], xz, yz, MSX1, MSY1, MSX2, MSY2, -Pi, Pi, Pi/30, aFound) then
+    begin
+      WriteLn('K1');
+      Mouse(xz, yz, 3, 3, True);
+      if FindDTMRotatedFailSafe(K[1], xz, yz, MSX1, MSY1, MSX2, MSY2, -Pi, Pi, Pi/30, aFound) then
+      begin
+        Mouse(xz, yz, 3, 3, True);
+      end;
+    end;
+    repeat
+      Wait(50 + Random(25));
+    until FindDTMRotatedFailSafe(K[2], xz, yz, MSX1, MSY1, MSX2, MSY2, -Pi/4, Pi/4, Pi/60, aFound);
+    if not LoggedIn then Exit;
+    if FindDTMRotatedFailSafe(K[2], xz, yz, MSX1, MSY1, MSX2, MSY2, -Pi, Pi, Pi/30, aFound) then
+    begin
+      WriteLn('K2');
+      Mouse(xz, yz, 3, 3, True);
+      if FindDTMRotatedFailSafe(K[2], xz, yz, MSX1, MSY1, MSX2, MSY2, -Pi, Pi, Pi/30, aFound) then
+      begin
+        Mouse(xz, yz, 3, 3, True);
+      end;
+    end;
+    repeat
+      Wait(50 + Random(25));
+    until FindDTMRotatedFailSafe(Q[2], xz, yz, MMX1, MMY1, MMX2, MMY2, -Pi/4, Pi/4, Pi/60, aFound);
+    if not LoggedIn then Exit;
+    if FindDTMRotatedFailSafe(Q[2], xz, yz, MMX1, MMY1, MMX2, MMY2, -Pi/4, Pi/4, Pi/60, aFound) then
+    begin
+      WriteLn('Q2');
+      Mouse(xz, yz, 0, 0, True);
+      FFlag(6);
+    end;
+    repeat
+      Wait(50 + Random(25));
+    until FindDTMRotatedFailSafe(Q[3], xz, yz, MMX1, MMY1, MMX2, MMY2, -Pi/4, Pi/4, Pi/60, aFound);
+    if not LoggedIn then Exit;
+    if FindDTMRotatedFailSafe(Q[3], xz, yz, MMX1, MMY1, MMX2, MMY2, -Pi/4, Pi/4, Pi/60, aFound) then
+    begin
+      WriteLn('Q3');
+      Mouse(xz, yz, 0, 0, True);
+      FFlag(6);
+    end;
+    repeat
+      Wait(50 + Random(25));
+    until FindDTMRotatedFailSafe(Q[4], xz, yz, MMX1, MMY1, MMX2, MMY2, -Pi/4, Pi/4, Pi/60, aFound);
+    if not LoggedIn then Exit;
+    if FindDTMRotatedFailSafe(Q[4], xz, yz, MMX1, MMY1, MMX2, MMY2, -Pi/4, Pi/4, Pi/60, aFound) then
+    begin
+      WriteLn('Q4');
+      Mouse(xz, yz, 0, 0, True);
+      FFlag(6);
+    end;
+    repeat
+      Wait(50 + Random(25));
+    until FindDTMRotatedFailSafe(Q[5], xz, yz, MMX1, MMY1, MMX2, MMY2, -Pi/4, Pi/4, Pi/60, aFound);
+    if not LoggedIn then Exit;
+    if FindDTMRotatedFailSafe(Q[5], xz, yz, MMX1, MMY1, MMX2, MMY2, -Pi/4, Pi/4, Pi/60, aFound) then
+    begin
+      WriteLn('Q5');
+      Mouse(xz, yz, 0, 0, True);
+      FFlag(6);
+    end;
+    repeat
+      Wait(50 + Random(25));
+    until FindDTMRotatedFailSafe(Q[6], xz, yz, MMX1, MMY1, MMX2, MMY2, -Pi/4, Pi/4, Pi/60, aFound);
+    if not LoggedIn then Exit;
+    Wait(500 + Random(25));
+    if FindDTMRotatedFailSafe(Q[6], xz, yz, MMX1, MMY1, MMX2, MMY2, -Pi/4, Pi/4, Pi/60, aFound) then
+    begin
+      WriteLn('Q6');
+      Mouse(xz, yz, 0, 0, True);
+      FFlag(6);
+    end;
+    repeat
+      Wait(50 + Random(25));
+    until FindDTMRotatedFailSafe(Q[7], xz, yz, MMX1, MMY1, MMX2, MMY2, -Pi/4, Pi/4, Pi/60, aFound);
+    if not LoggedIn then Exit;
+    if FindDTMRotatedFailSafe(Q[7], xz, yz, MMX1, MMY1, MMX2, MMY2, -Pi/4, Pi/4, Pi/60, aFound) then
+    begin
+      WriteLn('Q7');
+      Mouse(xz, yz, 0, 0, True);
+      FFlag(6);
+    end;
+    repeat
+      Wait(50 + Random(25));
+    until FindDTMRotatedFailSafe(Q[8], xz, yz, MMX1, MMY1, MMX2, MMY2, -Pi/4, Pi/4, Pi/60, aFound);
+    if not LoggedIn then Exit;
+    if FindDTMRotatedFailSafe(Q[8], xz, yz, MMX1, MMY1, MMX2, MMY2, -Pi/4, Pi/4, Pi/60, aFound) then
+    begin
+      WriteLn('Q8');
+      Mouse(xz, yz, 0, 0, True);
+      FFlag(6);
+    end;
+    repeat
+      Wait(50 + Random(25));
+    until FindDTMRotatedFailSafe(Q[9], xz, yz, MMX1, MMY1, MMX2, MMY2, -Pi/4, Pi/4, Pi/60, aFound);
+    if not LoggedIn then Exit;
+    if FindDTMRotatedFailSafe(Q[9], xz, yz, MMX1, MMY1, MMX2, MMY2, -Pi/4, Pi/4, Pi/60, aFound) then
+    begin
+      WriteLn('Q9');
+      Mouse(xz, yz, 0, 0, True);
+      FFlag(6);
+    end;
+    repeat
+      Wait(50 + Random(25));
+    until FindDTMRotatedFailSafe(Q[10], xz, yz, MMX1, MMY1, MMX2, MMY2, -Pi/4, Pi/4, Pi/60, aFound);
+    if not LoggedIn then Exit;
+    if FindDTMRotatedFailSafe(Q[10], xz, yz, MMX1, MMY1, MMX2, MMY2, -Pi/4, Pi/4, Pi/60, aFound) then
+    begin
+      WriteLn('Q10');
+      Mouse(xz, yz, 0, 0, True);
+      FFlag(6);
+    end;
+    if not LoggedIn then Exit;
+    Wait(500 + Random(25));
+    Writeln('We have reached our Final Destination!');
+    stats_IncVariable('Caves Entered',1);
+    Inc(DethWelks);
+    Result := 'Walked';
+    FFlag(0);
+    MouseSpeed := MOUSE_SPEED + Random(MOUSE_SPEED_RANDOMNESS);
+    ClickNorth(True);
+  finally
+    try
+      FreeDTM(Q[0]);
+      FreeDTM(Q[1]);
+      FreeDTM(Q[2]);
+      FreeDTM(Q[3]);
+      FreeDTM(Q[4]);
+      FreeDTM(Q[5]);
+      FreeDTM(Q[6]);
+      FreeDTM(Q[7]);
+      FreeDTM(Q[8]);
+      FreeDTM(Q[9]);
+      FreeDTM(Q[10]);
+      FreeDTM(K[0]);
+      FreeDTM(K[1]);
+      FreeDTM(K[2]);
+    except
+      WriteLn('DTM Freeing Failed!');
+    end;
+  end;
+end;
+
+procedure GetReadyToRespawn(whyme: string);
+var tmpz,ii,zzx,zzy: integer; walkerz: string;
+begin
+  if (GetColor(304, 27) = 12378347) or FindSymbol(zzx,yyy,'water') or (whyme = 'force') then // yellow on dead screen
   begin
     WriteLn('Oh dear you are dead :(');
     Wait(1000+Random(2000));
-    //MouseBox(186, 298, 330, 318, 1); // Confirm death button.
+    if (GetColor(413, 7) = 0) then
+      MouseBox(186, 298, 330, 318, 1); // Confirm death button.
     tmpz := 0;
     xxx := 257-random(30)+random(30);
     yyy := 200-random(30)+random(30);
     Players[CurrentPlayer].Loc := 'Dead';
-    WriteLn('No deathwalk. Get more HP and anti-mage armour!');
-    RandomNextPlayer(False);
-    Exit;
-    {repeat
+    repeat
       inc(tmpz)
       Wait(1000+Random(1000));
       if (GetColor(413, 7) <> 0) or (tmpz > 5) then // black color on background goes away when screen closed
         Break;
-    until (tmpz > 5);} // just incase...
+    until (tmpz > 5); // just incase...
+
+    for ii := 1 to 4 do // put back on armour and stuff
+      if ExistsItem(ii) then
+      begin
+        MMouseItem(ii);
+        Wait(100+Random(500));
+        if not IsUpText('Use') then
+        begin
+          GetMousePos(zzx,zzy);
+          Mouse(zzx,zzy,0,0,True);
+        end;
+      end;
+
+    walkerz := DoDeathWalk;
+    if (walkerz <> 'Walked') then
+    begin
+      WriteLn('Deathwalk didn''t work properly!');
+      if (walkerz = 'FailLumb') then
+      begin
+        if not LoggedIn then LoginPlayer;
+        WriteLn('Lumbridge Walk failed. Teleport home and let''s try again.');
+        GameTab(tab_Magic);
+        Wait(100+Random(500));
+        Mouse(575, 230,5,5,True); // TP home
+        Wait(15000+Random(7000)); // ~13 sec max for home teleport
+        walkerz := DoDeathWalk;
+        if (walkerz <> 'Walked') then
+        begin
+          WriteLn('Failed AGAIN! Too bad!');
+          Players[CurrentPlayer].Loc := 'FailWalks';
+          TakeScreen('FailWalk');
+          RandomNextPlayer(False);
+        end else
+        begin
+          WriteLn('Walk worked second time, yay!');
+          Exit;
+        end;
+      end;
+
+    end else
+      WriteLn('Deathwalk worked!');
+
   end;
 end;
 
@@ -154,11 +459,11 @@ begin
   MouseSpeed := M;
 end;
 
-procedure AntiBan_Short(waitz:integer);
+procedure AntiBan_Short(disg:string; waitz:integer);
 begin
   while (waitz > 0) do
   begin
-    status(tostr(waitz));
+    status(disg+': '+tostr(waitz)+'ms');
     case (Random(200)) of
       0: begin RandomRClickH; Inc(Players[CurrentPlayer].Integers[2]); Inc(AntiBansGlobal); end;
       1: begin MouseSpeed := MOUSE_SPEED + Random(MOUSE_SPEED_RANDOMNESS); Inc(Players[CurrentPlayer].Integers[2]); Inc(AntiBansGlobal); end;
@@ -173,14 +478,22 @@ begin
 end;
 
 procedure CheckPowerLevels;
+var x,y:integer;
 begin
   if not LoggedIn or LobbyScreen then
     Exit;
-  {if TrainLowest then
+  if TrainLowest then
   begin
     Players[CurrentPlayer].Integers[6] := GetSkillLevel(Skill_Attack);
     Players[CurrentPlayer].Integers[7] := GetSkillLevel(Skill_Strength);
     Players[CurrentPlayer].Integers[8] := GetSkillLevel(Skill_Defence);
+    GameTab(tab_Combat);
+    wait(300+Random(700));
+    if (IsTextInAreaEx(576, 209, 725, 230, x, y, 'ling', 0, NPCChars, False, False, 0, 2, 2070783)) then
+    begin
+      WriteLn('You have a sling attached, please disable TrainLowest const!');
+      Exit;
+    end;
     if Players[CurrentPlayer].Integers[7] < Players[CurrentPlayer].Integers[6] then
     begin  // Borrowed some logic from Tarajunky
       if Players[CurrentPlayer].Integers[8] < Players[CurrentPlayer].Integers[7] then
@@ -194,7 +507,7 @@ begin
       else
         SetFightMode(1);
     end;
-  end;}
+  end;
 end;
 
 Function nInFight: Boolean; // Narcle!
@@ -302,7 +615,7 @@ begin
         WriteLn('Eating foodstuffs in slot '+tostr(chen)+'!');
         GetMousePos(ex,ey);
         Mouse(ex,ey,0,0,True);
-        Antiban_Short(1000+Random(1000));
+        Antiban_Short('Eating',1000+Random(1000));
         if ExistsItem(chen) then
           Wait(1000+Random(1000));
         stats_IncVariable('Lobster Eaten',1); // most generic var name on stats sadly
@@ -328,7 +641,7 @@ begin
 end;
 
 function FindVictim: Boolean;
-var breakingthefight,expz,recentone: integer;
+var breakingthefight,expz,recentone,lastdtm,xz,yz: integer;
 begin
   Result := False;
   if not loggedin then
@@ -346,86 +659,132 @@ begin
   Inc(thetries);
   if (xxx < 150) or (xxx < 150) then
   begin
-    WriteLn('recalibrated xxx,yyy coords');
+   // not really needed anymore WriteLn('recalibrated xxx,yyy coords');
     xxx := 257-random(30)+random(30);
     yyy := 200-random(30)+random(30);
   end;
-  GetReadyToRespawn;
+  GetReadyToRespawn('');
   expz:=HGetXPBarTotal;
-  if isuptext('ouch P') or findobjtpah(xxx,yyy,8556439, 5, 1, 30, 30, 1, ['ouch P']) then // touch the pie!
+  if FindDTMRotated(YesS, xxx, yyy, MSX1, MSY1, MSX2, MSY2, -Pi/4, Pi/4, Pi/30, aFound) or FindDTMRotated(NoS, xxx, yyy, MSX1, MSY1, MSX2, MSY2, -Pi/4, Pi/4, Pi/30, aFound) then
   begin
-    Inc(MonstersKilledGlobal);
-    IncEx(Players[CurrentPlayer].Integers[69],133);
-    stats_IncVariable('Total EXP Gained', 133);
-    stats_IncVariable('Monsters Killed', 1);
-    getmousepos(xxx,yyy);
-    mouse(xxx,yyy,0,0,true);
-    thetries := 0;
-    Result := True;
-    SMART_DrawBox(inttobox(xxx-15,yyy-15,xxx+15,yyy+15));
-    antiban_short(5000+Random(3000));
-    breakingthefight := 0;
-    repeat
-      inc(breakingthefight);
-      antiban_short(100+Random(500));
-      GetReadyToRespawn;
-      findnormalrandoms;
-      recentone := (HGetXPBarTotal-expz);
-      if (recentone>=133) and (recentone<=5000) then // make sure no false detection
-      begin
-        writeLn('You (probably) killed it, 133 exp for you!');
-        break;
-      end;
-      if (TimeFromMark(lasthpbar) > 60000) then
-      begin
-        if (tmpbarz > 1) then
+    SMART_DrawBox(inttobox(xxx-8,yyy-8,xxx+8,yyy+8));
+    if not isUpTextMultiCustom(['ouch P','ake Di']) then
+    begin
+      mmouse((xxx-7),(yyy+3),4,4);
+      //writeln(GetUpText);
+    end
+    else
+      WriteLn('Mouse already over uptext: '+getUpText);
+
+    if WaitUpTextMulti(['ouch P','ake Di'], 300)then
+    begin
+      Getmousepos(xxx,yyy);
+      mouse(xxx,yyy,0,0,true);
+      Inc(MonstersKilledGlobal);
+      IncEx(Players[CurrentPlayer].Integers[69],133);
+      Players[CurrentPlayer].Integers[25] := 0;
+      stats_IncVariable('Total EXP Gained', 133);
+      stats_IncVariable('Monsters Killed', 1);
+      thetries := 0;
+      Result := True;
+      antiban_short('AttackWait', 5000+Random(3000));
+      breakingthefight := 0;
+      repeat
+        inc(breakingthefight);
+        antiban_short('WaitingAttack', 100+Random(500));
+        GetReadyToRespawn('');
+        findnormalrandoms;
+        recentone := (HGetXPBarTotal-expz);
+        if (recentone>=133) and (recentone<=5000) then // make sure no false detection
         begin
-          TakeScreen('StillNoHPBar');
-          Writeln('No HP bar after switching worlds... going to kill your player, sorry!');
-          Players[CurrentPlayer].Loc := 'NoHPBar';
-          RandomNextPlayer(False);
-          Exit;
-        end
-        else
-        begin
-          TakeScreen('NoHPBar');
-          inc(tmpbarz);
-          WriteLn('No HP Bar for over over a minute, something might be wrong!');
-          Writeln('Reconnecting just in case.');
-          Logout;
-          Wait(1000+Random(4000));
-          LoginPlayer;
-          Exit;
+          writeLn('You (probably) killed it, 133 exp for you!');
+          break;
         end;
-      end;
-      if not nInFight then Break;
-      KeepHealthy;
-    until (breakingthefight > 150); // I dunno, about 50 sec?
-    if (breakingthefight > 150) then
-      WriteLn('We took quite a bit to kill him, something might be wrong...');
-    antiban_short(100+random(2488));
-    Exit;
+        if not nInFight then Break else tmpbarz := 0;
+        if (TimeFromMark(lasthpbar) > 60000) then
+        begin
+          if (tmpbarz > 1) then
+          begin
+            TakeScreen('StillNoHPBar');
+            Writeln('No HP bar after switching worlds... going to kill your player, sorry!');
+            Players[CurrentPlayer].Loc := 'NoHPBar';
+            RandomNextPlayer(False);
+            tmpbarz := 0;
+            Exit;
+          end
+          else
+          begin
+            TakeScreen('NoHPBar');
+            inc(tmpbarz);
+            WriteLn('No HP Bar for over over a minute, something might be wrong!');
+            Writeln('Reconnecting just in case.');
+            Logout;
+            Wait(1000+Random(4000));
+            LoginPlayer;
+            Exit;
+          end;
+        end;
+        KeepHealthy;
+      until (breakingthefight > 150); // I dunno, about 50 sec?
+      if (breakingthefight > 150) then
+        WriteLn('We took quite a bit to kill him, something might be wrong...');
+      antiban_short('KilledWait',500+random(2488));
+      Exit;
+
+    end;
+
   end;
   wait(500+random(2000));
-  if(thetries = 2)or(thetries = 10)or(thetries=20)then
-  begin
-    TakeScreen('MiniMapClick');
-    Writeln('you maybe moved away? clicking minimap.');
-    mousebox(647,107,676,138,1);
-    antiban_short(100);
-    flag;
-  end;
+
+  if(thetries = 2)or(thetries = 5)or(thetries = 10)or(thetries=20)then
+    if (PercentBlackMM > 20) then
+    begin
+      TakeScreen('MiniMapClick');
+      Writeln('you maybe moved away? clicking minimap.');
+      lastdtm := DTMFromString('mpAIAAHicxc6xCwFxGMbxl7qMihuUgcWmrkuWG5SIMmIwGO46udIlJkkZlMFgoa6bKZuSv9D36t2Nv7c+9dbz1PvWReSbF3nihhdSXHDGFnOMMEQfE4SaZZ07Hnhrr4MWPAwwRYQDEr3xwQ5j9PihDQ9LBJihC0dleRM1VFBGCTaqaMCFj5Xa44QrUiS6H7HGBjGihS8FyzKmyA8m5Qz7Nz9t6x4V');
+
+      if FindDTMRotated(lastdtm, xz, yz, MMX1, MMY1, MMX2, MMY2, -Pi/4, Pi/4, Pi/60, aFound) then
+      begin
+        WriteLn('DTM Walking');
+        Mouse(xz, yz, 3, 3, True);
+        FFlag(6);
+      end else
+      begin
+        WriteLn('Blind Walking');
+        mousebox(647,107,676,138,1);
+      end;
+      try freeDTM(lastDTM); except WriteLn('DTM Free Failed'); end;
+      antiban_short('BlindClick',100);
+      flag;
+    end
+    else
+      WriteLn('We would blind click but we probably aren''t underground, not enough black.');
+
   if(thetries > 30)then
   begin
     TakeScreen('NoObj');
     writeln('no object 30 times, your player is a bit broken...');
     thetries := 0;
     Players[CurrentPlayer].Loc := 'NoObj';
-    RandomNextplayer(False);
+    if (Players[CurrentPlayer].Integers[25] <> 0) then
+    begin
+      TakeScreen('NoObjFatal');
+      RandomNextplayer(False);
+    end
+    else
+    begin
+      Inc(Players[CurrentPlayer].Integers[25]);
+      GetReadyToRespawn('force');
+    end;
     Exit;
   end;
-  writeln('No object found; did you steal the statue yet? You MUST have stolen the statue off the platter before running script!');
-  writeln('Make sure you stand next to it. Also make sure you''re on lowest grafix settings+highest brightness.');
+  writeln('No object found ('+tostr(thetries)+' tries); did you steal the statue yet? You MUST have stolen the statue off the platter before running script! Make sure you stand next to it. Also make sure you''re on lowest grafix settings+highest brightness.');
+
+  if(thetries = 7)then // use something like findsymbol when it works again?
+  begin
+    WriteLn('Going to try deathwalk.');
+    GetReadyToRespawn('force');
+  end;
 
 end;
 
@@ -576,6 +935,17 @@ begin
     WriteLn('!!!!! Not checking for latest version, you may be outdated!');
 end;
 
+procedure FreeGlobalDTMs;
+begin
+  try
+    FreeDTM(YesS);
+    FreeDTM(NoS);
+  except
+    WriteLn('FreeDTM Failed!');
+  end;
+  writeln('Thanks for running my script, please post proggies on http://villavu.com/forum/showthread.php?t=69540 !');
+end;
+
 procedure SetUpScript;
 var
   i,xxx,yyy: Integer;
@@ -589,9 +959,17 @@ begin
   Autoupdateme;
 
   SetupSRL;
+  Screenshots := GetScreenies;
   Reincarnate := True;
   DeclarePlayers;
   LampSkill := 'hitpoints';
+  SmartSetRefresh(100); // highest fps
+
+  YesS:=DTMFromString('mwQAAAHic42RgYGhhZGCoAeJOIG4E4nYgTgHiZUB8EIiPAPFnoLp3QPwTiL8CsTBQTBCIRYGYDYgfAcWm9TUxVBZlwDEvLy8G5geqI4QZicBwAAAQEBEZ');
+  NoS:=DTMFromString('mrAAAAHic42BgYGhiZGCoAeJuIK4H4kwg7gPi/UB8HIiVgFgaiNWBWAWInaHYHojlgbh/6RKGmkmT4ZiXlxcF8wPtwIcZCWAYAABHKQ3h');
+
+  AddOnTerminate('FreeGlobalDTMS');
+
 
   if (SRLStats_Username = '') then
     SetupSRLStats(354, 'Anonymous', 'anon1337')
@@ -616,12 +994,6 @@ begin
   xxx := 257-random(30)+random(30);
   yyy := 200-random(30)+random(30);
   Wait(1000 + Random(2000));
- { repeat
-
-  findvictim;
-
-  wait(2000+random(3000));
-  until false;}
 end;
 
 procedure MainLoop;
