@@ -1,6 +1,6 @@
 {///////////////////////////////////////////////////////////////////////////////
 //                                                                            //
-//                        Harry's Catacomb Grabber v0.5                       //
+//                        Harry's Catacomb Grabber v0.6                       //
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
@@ -33,6 +33,7 @@
 //             set the highest FPS for the RS client, says current status in  //
 //             status section (under debug box), and some small bug fixes.    //
 //             Overall should attack much quicker, giving more exp/hr!        //
+//      0.6: Fixed small bug that broke anti-fight detector.                  //
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
@@ -48,6 +49,7 @@
 
 program HarrysCatacomber;
 {$DEFINE SMART}
+{$DEFINE CRASHSMART}
 {$i SRL/SRL.scar}
 {$i SRL/SRL/Misc/Stats.simba}
 {$i SRL/SRL/Misc/PaintSmart.scar}
@@ -108,7 +110,7 @@ const
 ////////////////////////////////////////////////////////////////////////////////
 
   SCRIPT_NAME        = 'Catacomb Grabber';
-  SCRIPT_VERSION     = '0.5';
+  SCRIPT_VERSION     = '0.6';
 
 var PlayerSessionTime,ReportTimer,AntiBansGlobal, MonstersKilledGlobal, xxx,yyy,
      WorldLeaveMarker, DethWelks, StatsTimer, thetries, YesS,NoS, DTMFsf,
@@ -141,7 +143,7 @@ begin;
       Exit;
     end;
   end;
-  Result := (TimeFromMark(DTMFsf) > 60000);
+  Result := (TimeFromMark(DTMFsf) > (60000+Random(20000)-Random(20000)));
   if (Result) then
   begin
     WriteLn('1 minute without finding DTM, something is wrong...');
@@ -700,7 +702,6 @@ begin
           writeLn('You (probably) killed it, 133 exp for you!');
           break;
         end;
-        if not nInFight then Break else tmpbarz := 0;
         if (TimeFromMark(lasthpbar) > 60000) then
         begin
           if (tmpbarz > 1) then
@@ -724,6 +725,7 @@ begin
             Exit;
           end;
         end;
+        if not nInFight then Break else tmpbarz := 0; // DON'T CHANGE THIS ORDERING
         KeepHealthy;
       until (breakingthefight > 150); // I dunno, about 50 sec?
       if (breakingthefight > 150) then
