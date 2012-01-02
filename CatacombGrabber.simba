@@ -1,6 +1,6 @@
 {///////////////////////////////////////////////////////////////////////////////
 //                                                                            //
-//                        Harry's Catacomb Grabber v0.6                       //
+//                        Harry's Catacomb Grabber v0.7                       //
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
@@ -34,6 +34,7 @@
 //             status section (under debug box), and some small bug fixes.    //
 //             Overall should attack much quicker, giving more exp/hr!        //
 //      0.6: Fixed small bug that broke anti-fight detector.                  //
+//      0.7: Made deathwalk fail 95% less often. Much better statue finding.  //
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
@@ -110,7 +111,7 @@ const
 ////////////////////////////////////////////////////////////////////////////////
 
   SCRIPT_NAME        = 'Catacomb Grabber';
-  SCRIPT_VERSION     = '0.6';
+  SCRIPT_VERSION     = '0.7';
 
 var PlayerSessionTime,ReportTimer,AntiBansGlobal, MonstersKilledGlobal, xxx,yyy,
      WorldLeaveMarker, DethWelks, StatsTimer, thetries, YesS,NoS, DTMFsf,
@@ -210,13 +211,13 @@ begin
       Wait(50 + Random(25));
     until FindDTMRotatedFailSafe(K[0], xz, yz, MSX1, MSY1, MSX2, MSY2, -Pi/4, Pi/4, Pi/60, aFound);
     if not LoggedIn then Exit;
-    if FindDTMRotatedFailSafe(K[0], xz, yz, MSX1, MSY1, MSX2, MSY2, -Pi, Pi, Pi/30, aFound) then
+    if FindDTMRotatedFailSafe(K[0], xz, yz, 228, MSY1, MSX2, MSY2, -Pi, Pi, Pi/30, aFound) then
     begin
       WriteLn('K0');
-      Mouse(xz, yz, 3, 3, True);
-      if FindDTMRotatedFailSafe(K[0], xz, yz, MSX1, MSY1, MSX2, MSY2, -Pi, Pi, Pi/30, aFound) then
+      Mouse(xz, yz, 5, 5, True);
+      if FindDTMRotatedFailSafe(K[0], xz, yz, 228, MSY1, MSX2, MSY2, -Pi, Pi, Pi/30, aFound) then
       begin
-        Mouse(xz, yz, 3, 3, True);
+        Mouse(xz, yz, 5, 5, True);
       end;
     end;
     repeat
@@ -233,10 +234,10 @@ begin
     if FindDTMRotatedFailSafe(K[1], xz, yz, MSX1, MSY1, MSX2, MSY2, -Pi, Pi, Pi/30, aFound) then
     begin
       WriteLn('K1');
-      Mouse(xz, yz, 3, 3, True);
+      Mouse(xz, yz, 5, 5, True);
       if FindDTMRotatedFailSafe(K[1], xz, yz, MSX1, MSY1, MSX2, MSY2, -Pi, Pi, Pi/30, aFound) then
       begin
-        Mouse(xz, yz, 3, 3, True);
+        Mouse(xz, yz, 5, 5, True);
       end;
     end;
     repeat
@@ -246,10 +247,10 @@ begin
     if FindDTMRotatedFailSafe(K[2], xz, yz, MSX1, MSY1, MSX2, MSY2, -Pi, Pi, Pi/30, aFound) then
     begin
       WriteLn('K2');
-      Mouse(xz, yz, 3, 3, True);
+      Mouse(xz, yz, 5, 5, True);
       if FindDTMRotatedFailSafe(K[2], xz, yz, MSX1, MSY1, MSX2, MSY2, -Pi, Pi, Pi/30, aFound) then
       begin
-        Mouse(xz, yz, 3, 3, True);
+        Mouse(xz, yz, 5, 5, True);
       end;
     end;
     repeat
@@ -259,96 +260,153 @@ begin
     if FindDTMRotatedFailSafe(Q[2], xz, yz, MMX1, MMY1, MMX2, MMY2, -Pi/4, Pi/4, Pi/60, aFound) then
     begin
       WriteLn('Q2');
-      Mouse(xz, yz, 0, 0, True);
+      Mouse(xz, yz, 5, 5, True);
       FFlag(6);
     end;
     repeat
       Wait(50 + Random(25));
+      if (TimeFromMark(DTMFsf) > (20000+Random(5000)-Random(5000))) then
+      begin
+        WriteLn('Doing another click.');
+        Mouse(xz, yz, 5, 5, True);
+        FFlag(0);
+        Wait(1000+Random(1000));
+      end;
     until FindDTMRotatedFailSafe(Q[3], xz, yz, MMX1, MMY1, MMX2, MMY2, -Pi/4, Pi/4, Pi/60, aFound);
     if not LoggedIn then Exit;
     if FindDTMRotatedFailSafe(Q[3], xz, yz, MMX1, MMY1, MMX2, MMY2, -Pi/4, Pi/4, Pi/60, aFound) then
     begin
       WriteLn('Q3');
-      Mouse(xz, yz, 0, 0, True);
+      Mouse(xz, yz, 5, 5, True);
       FFlag(6);
     end;
     repeat
       Wait(50 + Random(25));
+      if (TimeFromMark(DTMFsf) > (20000+Random(5000)-Random(5000))) then
+      begin
+        WriteLn('Doing another click.');
+        Mouse(xz, yz, 5, 5, True);
+        FFlag(0);
+        Wait(1000+Random(1000));
+      end;
     until FindDTMRotatedFailSafe(Q[4], xz, yz, MMX1, MMY1, MMX2, MMY2, -Pi/4, Pi/4, Pi/60, aFound);
     if not LoggedIn then Exit;
     if FindDTMRotatedFailSafe(Q[4], xz, yz, MMX1, MMY1, MMX2, MMY2, -Pi/4, Pi/4, Pi/60, aFound) then
     begin
       WriteLn('Q4');
-      Mouse(xz, yz, 0, 0, True);
+      Mouse(xz, yz, 5, 5, True);
       FFlag(6);
     end;
     repeat
       Wait(50 + Random(25));
+      if (TimeFromMark(DTMFsf) > (20000+Random(5000)-Random(5000))) then
+      begin
+        WriteLn('Doing another click.');
+        Mouse(xz, yz, 5, 5, True);
+        FFlag(0);
+        Wait(1000+Random(1000));
+      end;
     until FindDTMRotatedFailSafe(Q[5], xz, yz, MMX1, MMY1, MMX2, MMY2, -Pi/4, Pi/4, Pi/60, aFound);
     if not LoggedIn then Exit;
     if FindDTMRotatedFailSafe(Q[5], xz, yz, MMX1, MMY1, MMX2, MMY2, -Pi/4, Pi/4, Pi/60, aFound) then
     begin
       WriteLn('Q5');
-      Mouse(xz, yz, 0, 0, True);
+      Mouse(xz, yz, 5, 5, True);
       FFlag(6);
     end;
     repeat
       Wait(50 + Random(25));
+      if (TimeFromMark(DTMFsf) > (20000+Random(5000)-Random(5000))) then
+      begin
+        WriteLn('Doing another click.');
+        Mouse(xz, yz, 5, 5, True);
+        FFlag(0);
+        Wait(1000+Random(1000));
+      end;
     until FindDTMRotatedFailSafe(Q[6], xz, yz, MMX1, MMY1, MMX2, MMY2, -Pi/4, Pi/4, Pi/60, aFound);
     if not LoggedIn then Exit;
     Wait(500 + Random(25));
     if FindDTMRotatedFailSafe(Q[6], xz, yz, MMX1, MMY1, MMX2, MMY2, -Pi/4, Pi/4, Pi/60, aFound) then
     begin
       WriteLn('Q6');
-      Mouse(xz, yz, 0, 0, True);
+      Mouse(xz, yz, 5, 5, True);
       FFlag(6);
     end;
     repeat
       Wait(50 + Random(25));
+      if (TimeFromMark(DTMFsf) > (20000+Random(5000)-Random(5000))) then
+      begin
+        WriteLn('Doing another click.');
+        Mouse(xz, yz, 5, 5, True);
+        FFlag(0);
+        Wait(1000+Random(1000));
+      end;
     until FindDTMRotatedFailSafe(Q[7], xz, yz, MMX1, MMY1, MMX2, MMY2, -Pi/4, Pi/4, Pi/60, aFound);
     if not LoggedIn then Exit;
     if FindDTMRotatedFailSafe(Q[7], xz, yz, MMX1, MMY1, MMX2, MMY2, -Pi/4, Pi/4, Pi/60, aFound) then
     begin
       WriteLn('Q7');
-      Mouse(xz, yz, 0, 0, True);
+      Mouse(xz, yz, 5, 5, True);
       FFlag(6);
     end;
     repeat
       Wait(50 + Random(25));
+      if (TimeFromMark(DTMFsf) > (20000+Random(5000)-Random(5000))) then
+      begin
+        WriteLn('Doing another click.');
+        Mouse(xz, yz, 5, 5, True);
+        FFlag(0);
+        Wait(1000+Random(1000));
+      end;
     until FindDTMRotatedFailSafe(Q[8], xz, yz, MMX1, MMY1, MMX2, MMY2, -Pi/4, Pi/4, Pi/60, aFound);
     if not LoggedIn then Exit;
     if FindDTMRotatedFailSafe(Q[8], xz, yz, MMX1, MMY1, MMX2, MMY2, -Pi/4, Pi/4, Pi/60, aFound) then
     begin
       WriteLn('Q8');
-      Mouse(xz, yz, 0, 0, True);
+      Mouse(xz, yz, 5, 5, True);
       FFlag(6);
     end;
     repeat
       Wait(50 + Random(25));
+      if (TimeFromMark(DTMFsf) > (20000+Random(5000)-Random(5000))) then
+      begin
+        WriteLn('Doing another click.');
+        Mouse(xz, yz, 5, 5, True);
+        FFlag(0);
+        Wait(1000+Random(1000));
+      end;
     until FindDTMRotatedFailSafe(Q[9], xz, yz, MMX1, MMY1, MMX2, MMY2, -Pi/4, Pi/4, Pi/60, aFound);
     if not LoggedIn then Exit;
     if FindDTMRotatedFailSafe(Q[9], xz, yz, MMX1, MMY1, MMX2, MMY2, -Pi/4, Pi/4, Pi/60, aFound) then
     begin
       WriteLn('Q9');
-      Mouse(xz, yz, 0, 0, True);
+      Mouse(xz, yz, 5, 5, True);
       FFlag(6);
     end;
     repeat
       Wait(50 + Random(25));
+      if (TimeFromMark(DTMFsf) > (20000+Random(5000)-Random(5000))) then
+      begin
+        WriteLn('Doing another click.');
+        Mouse(xz, yz, 5, 5, True);
+        FFlag(0);
+        Wait(1000+Random(1000));
+      end;
     until FindDTMRotatedFailSafe(Q[10], xz, yz, MMX1, MMY1, MMX2, MMY2, -Pi/4, Pi/4, Pi/60, aFound);
     if not LoggedIn then Exit;
     if FindDTMRotatedFailSafe(Q[10], xz, yz, MMX1, MMY1, MMX2, MMY2, -Pi/4, Pi/4, Pi/60, aFound) then
     begin
       WriteLn('Q10');
-      Mouse(xz, yz, 0, 0, True);
+      Mouse(xz, yz, 5, 5, True);
       FFlag(6);
-    end;
+    end else
+      Mouse(xz, yz, 5, 5, True);
     if not LoggedIn then Exit;
     Wait(500 + Random(25));
     Writeln('We have reached our Final Destination!');
     stats_IncVariable('Caves Entered',1);
     Inc(DethWelks);
-	MarkTime(lasthpbar);
+    markTime(lasthpbar);
     Result := 'Walked';
     FFlag(0);
     MouseSpeed := MOUSE_SPEED + Random(MOUSE_SPEED_RANDOMNESS);
@@ -415,6 +473,8 @@ begin
       begin
         if not LoggedIn then LoginPlayer;
         WriteLn('Lumbridge Walk failed. Teleport home and let''s try again.');
+        GameTab(tab_Magic);
+        Wait(100+Random(500));
         GameTab(tab_Magic);
         Wait(100+Random(500));
         Mouse(575, 230,5,5,True); // TP home
@@ -644,9 +704,10 @@ begin
 end;
 
 function FindVictim: Boolean;
-var breakingthefight,expz,recentone,lastdtm,xz,yz: integer;
+var breakingthefight,expz,recentone,lastdtm,xz,yz,statuestatus: integer;
 begin
   Result := False;
+  statuestatus := 0;
   if not loggedin then
     Exit;
 
@@ -668,12 +729,23 @@ begin
   end;
   GetReadyToRespawn('');
   expz:=HGetXPBarTotal;
-  if FindDTMRotated(YesS, xxx, yyy, MSX1, MSY1, MSX2, MSY2, -Pi/4, Pi/4, Pi/30, aFound) or FindDTMRotated(NoS, xxx, yyy, MSX1, MSY1, MSX2, MSY2, -Pi/4, Pi/4, Pi/30, aFound) then
+  if FindDTMRotated(YesS, xxx, yyy, MSX1, MSY1, MSX2, MSY2, -Pi/4, Pi/4, Pi/30, aFound) then
+    statuestatus := 1;
+  if (statuestatus = 0) and FindDTMRotated(NoS, xxx, yyy, MSX1, MSY1, MSX2, MSY2, -Pi/4, Pi/4, Pi/30, aFound) then
+    statuestatus := 2;
+
+  if statuestatus <> 0 then
   begin
-    SMART_DrawBox(inttobox(xxx-8,yyy-8,xxx+8,yyy+8));
+    if (statuestatus = 1) then
+      SMART_DrawBox(inttobox(xxx-15,yyy-11,xxx+1,yyy+11))
+    else
+      SMART_DrawBox(inttobox(xxx+1,yyy-5,xxx+17,yyy+11));
     if not isUpTextMultiCustom(['ouch P','ake Di']) then
     begin
-      mmouse((xxx-7),(yyy+3),4,4);
+      if (statuestatus = 1) then
+        mmouse(xxx-7,yyy+3,8,8)
+      else
+        mmouse(xxx+9,yyy+3,8,8);
       //writeln(GetUpText);
     end
     else
@@ -882,7 +954,7 @@ begin
   begin
     WriteLn('/!\ ACHTUNG! /!\');
     WriteLn('Your combat level is low, so you will probably die a lot.');
-    WriteLn('Be warned, your exp/hr will be low due to this (and no deathwalk yet)!');
+    WriteLn('Be warned, your exp/hr will be low due to this!');
   end;
   if (GetColor(433, 499) = 65280) then // assist on
   begin
