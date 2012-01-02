@@ -348,6 +348,7 @@ begin
     Writeln('We have reached our Final Destination!');
     stats_IncVariable('Caves Entered',1);
     Inc(DethWelks);
+	MarkTime(lasthpbar);
     Result := 'Walked';
     FFlag(0);
     MouseSpeed := MOUSE_SPEED + Random(MOUSE_SPEED_RANDOMNESS);
