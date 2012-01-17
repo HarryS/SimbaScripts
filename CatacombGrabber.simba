@@ -1,6 +1,6 @@
 {///////////////////////////////////////////////////////////////////////////////
 //                                                                            //
-//                        Harry's Catacomb Grabber v0.9                       //
+//                        Harry's Catacomb Grabber v1.0                       //
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
@@ -39,6 +39,9 @@
 //              pickup added (burries bones and grabs coins) - will reduce    //
 //              exp/hr, so I suggest you keep it disabled.                    //
 //      0.9: Deathwalk pretty much perfect. Hopefully last update about this. //
+//      1.0: Turns off ugly onscreen XP popups (terrible update Jagex, really //
+//              ugly). Also supports new XP counter - make sure your fonts    //
+//              in Simba are up-to-date!                                      //
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
@@ -58,7 +61,6 @@ program HarrysCatacomber;
 {$i SRL/SRL/Misc/PaintSmart.simba}
 
 procedure DeclarePlayers;
-var i: integer;
 begin
   HowManyPlayers := 1;
   CurrentPlayer := Random(HowManyPlayers);
@@ -115,10 +117,10 @@ const
 ////////////////////////////////////////////////////////////////////////////////
 
   SCRIPT_NAME        = 'Catacomb Grabber';
-  SCRIPT_VERSION     = '0.9';
+  SCRIPT_VERSION     = '1.0';
 
 var PlayerSessionTime,ReportTimer,AntiBansGlobal, MonstersKilledGlobal, ExpGainGlobal, xxx,yyy,
-     WorldLeaveMarker, DethWelks, StatsTimer, thetries, YesS,NoS, DTMFsf, BonesBurriedGlobal,
+     WorldLeaveMarker, DethWelks, StatsTimer, thetries, YesS,NoS,Herz, DTMFsf, BonesBurriedGlobal,
      ProperLog, ReportClear, lasthpbar,tmpbarz : integer; aFound: Extended; sonic,KilledYou: boolean;
 
 function FindDTMRotatedFailSafe(DTM: Integer; var x, y: Integer; x1, y1, x2, y2: Integer; sAngle, eAngle, aStep: Extended; out aFound: Extended): boolean;
@@ -227,6 +229,137 @@ begin
 
 end;
 
+Function BuryBones: Boolean; // Narcle!
+var
+  i, x, y, t,iix1,iiy1,iix2,iiy2: integer; invboxi:tbox;
+begin
+  if not GrabBones then
+    Exit;
+  SetColorToleranceSpeed(1);
+  SetColorspeed2Modifiers(0.2,0.2);
+
+  for i := 1 to 28 do
+  begin
+    invboxi := InvBox(i);
+    iix1:=invboxi.X1;
+    iiy1:=invboxi.Y1;
+    iix2:=invboxi.X2;
+    iiy2:=invboxi.Y2;
+
+    if FindColorTolerance(x,y,10000543,iix1,iiy1,iix2,iiy2,30) then
+    begin
+      WriteLn('Moving to position '+tostr(i));
+      MMouseItem(i);
+      if WaitUpText('ury', 500) then
+      begin
+        Inc(Players[CurrentPlayer].Integers[57]);
+        Inc(BonesBurriedGlobal);
+        stats_incVariable('Bones (Burried)',1);
+        GetMousePos(x, y);
+        Mouse(x, y, 0, 0, true);
+        Wait(900+random(300));
+        t := GetSystemTime;
+        while ExistsItem(i) and ((GetSystemTime-t) < 450) do
+          wait(75 + random(50));
+        if (GetSystemTime - t) >= 450 then //We cannot bury at this place..
+        begin
+          //writeln('No bury.');
+          Result := false;
+          //Exit;
+        end;
+        Result := true;
+      end;
+    end;
+  end;
+end;
+
+function CustomPickup:boolean; // Narcle!
+var
+  i, L, m, H,mmx,mmy,flagtimes:integer;
+  T: TPoint;
+  BoxArr: TBoxArray;
+  MBox: TBox;
+  Items, TPA: TPointArray;
+  CaseTrue: boolean;
+  ATPA: T2DPointArray;
+begin
+  if not GrabBones then
+    Exit;
+
+  Items := GetMMDotsOnMS('item');
+  L := Length(Items);
+  if L < 1 then
+    Exit;
+
+  SetLength(BoxArr, L);
+  for i := 0 to L-1 do
+  begin
+    T := MMtoMS(Items[i]);
+    BoxArr[i] := IntToBox(Max(T.x-40, MSX1), Max(T.y-40, MSY1), Min(T.x+40, MSX2), Min(T.y+40, MSY2));
+  end;
+
+  H := High(Players[CurrentPlayer].Arrays[2]);
+
+  for m := 0 to L-1 do
+  begin
+    if InvFull then//check
+    begin
+      BuryBones;
+      if InvFull then begin WriteLn('Inv still full, oops!'); Exit; end;
+    end;
+
+    begin
+      CaseTrue := false;
+      SetColorToleranceSpeed(2);
+      SetColorspeed2Modifiers(0.27, 1.87);
+      with BoxArr[m] do
+        CaseTrue := FindColorsTolerance(TPA, 13094113, X1, Y1, X2, Y2, 13);
+
+      if not CaseTrue then
+        Continue;
+
+      ATPA := SplitTPA(TPA, 3);
+      SortATPASize(ATPA, True);
+      MBox := GetTPABounds(ATPA[0]);
+      T := MiddleBox(MBox);
+    end;
+
+    if PointInBox(T, IntToBox(240, 137, 278, 185)) or
+      PointInBox(T, IntToBox( 410, 53, MSX2, 72)) or
+      PointInBox(T, IntToBox( 0, 0, 100, 25)) then
+        Continue;
+
+    //ClearCanvas(SMART_Canvas.canvas, MSX2, MSY2); // could not call proc error a lot, not sure why
+    if DrawDebugs then
+    begin
+      SMART_DrawBoxEx(True, BoxArr[m], clYellow);
+      SMART_DrawBoxEx(False, MBox, clRed);
+    end;
+
+    with MBox do
+      MouseBox(x1, y1, x2, y2, 3);
+
+    if WaitUpTextMulti(['Take'], 100+random(50)) then
+    begin
+      GetMousePos(mmx,mmy);
+      Mouse(mmx,mmy,0,0,False);
+      if WaitOptionMultiEx(['oins','Rune','ones'], 'All', ClickLeft, 1000) then
+      begin
+        Result := True;
+        Writeln('Picking up item');
+        SetColorToleranceSpeed(1);
+        SetColorspeed2Modifiers(0.2,0.2);
+        marktime(flagtimes);
+        while (timefrommark(flagtimes) < 1500) do
+         FlagPresentH;
+        if (timefrommark(flagtimes) > 1500) then writeln('breakin');
+        Wait(100+random(600));
+      end;
+    end;
+  end;
+
+end;
+
 function DoDeathWalk: string;
 var
   xz, yz, blkcolor: Integer;
@@ -255,7 +388,8 @@ begin
     MakeCompass('e');
     SetAngle(SRL_ANGLE_HIGH);
     SetRun(True);
-    Mouse(626, 60, 3, 3, True);
+    if not FindDTMRotatedFailSafe(Q[0], xz, yz, MMX1, MMY1, MMX2, MMY2, -Pi/4, Pi/4, Pi/60, aFound) and LoggedIn then
+      Mouse(626, 60, 3, 3, True);
     FFlag(6);
     Writeln('Beginning Deathwalk by DemiseScythe');
     MarkTime(DTMFsf);
@@ -627,7 +761,10 @@ begin
     markTime(lasthpbar);
     Result := 'Walked';
     FFlag(0);
+    Wait(2000+Random(3000));
     MouseSpeed := MOUSE_SPEED + Random(MOUSE_SPEED_RANDOMNESS);
+    CustomPickup;
+    BuryBones;
     if KilledYou then
     begin
       WriteLn('You got killed, so we will switch world to prevent bugged monster.');
@@ -802,137 +939,6 @@ begin
   end;
 end;
 
-Function BuryBones: Boolean; // Narcle!
-var
-  i, x, y, t,iix1,iiy1,iix2,iiy2: integer; invboxi:tbox;
-begin
-  SetColorToleranceSpeed(1);
-  SetColorspeed2Modifiers(0.2,0.2);
-
-  for i := 1 to 28 do
-  begin
-    invboxi := InvBox(i);
-    iix1:=invboxi.X1;
-    iiy1:=invboxi.Y1;
-    iix2:=invboxi.X2;
-    iiy2:=invboxi.Y2;
-
-    if FindColorTolerance(x,y,10000543,iix1,iiy1,iix2,iiy2,30) then
-    begin
-      WriteLn('Moving to position '+tostr(i));
-      MMouseItem(i);
-      if WaitUpText('ury', 500) then
-      begin
-        Inc(Players[CurrentPlayer].Integers[57]);
-        Inc(BonesBurriedGlobal);
-        stats_incVariable('Bones (Burried)',1);
-        GetMousePos(x, y);
-        Mouse(x, y, 0, 0, true);
-        Wait(900+random(300));
-        t := GetSystemTime;
-        while ExistsItem(i) and ((GetSystemTime-t) < 250) do
-          wait(75 + random(50));
-        if (GetSystemTime - t) >= 250 then //We cannot bury at this place..
-        begin
-          //writeln('No bury.');
-          Result := false;
-          Exit;
-        end;
-        Result := true;
-      end;
-    end;
-  end;
-end;
-
-function CustomPickup:boolean; // Narcle!
-var
-  i, L, m, H,mmx,mmy,flagtimes:integer;
-  T: TPoint;
-  BoxArr: TBoxArray;
-  MBox: TBox;
-  Items, TPA: TPointArray;
-  CaseTrue: boolean;
-  ATPA: T2DPointArray;
-begin
-  if not GrabBones then
-    Exit;
-
-  Items := GetMMDotsOnMS('item');
-  L := Length(Items);
-  if L < 1 then
-    Exit;
-
-  SetLength(BoxArr, L);
-  for i := 0 to L-1 do
-  begin
-    T := MMtoMS(Items[i]);
-    BoxArr[i] := IntToBox(Max(T.x-40, MSX1), Max(T.y-40, MSY1), Min(T.x+40, MSX2), Min(T.y+40, MSY2));
-  end;
-
-  H := High(Players[CurrentPlayer].Arrays[2]);
-
-  for m := 0 to L-1 do
-  begin
-    if InvFull then//check
-    begin
-      BuryBones;
-      if InvFull then begin WriteLn('Inv still full, oops!'); Exit; end;
-    end;
-
-    begin
-      CaseTrue := false;
-      SetColorToleranceSpeed(2);
-      SetColorspeed2Modifiers(0.27, 1.87);
-      with BoxArr[m] do
-        CaseTrue := FindColorsTolerance(TPA, 13094113, X1, Y1, X2, Y2, 13);
-
-      if not CaseTrue then
-        Continue;
-
-      ATPA := SplitTPA(TPA, 3);
-      SortATPASize(ATPA, True);
-      MBox := GetTPABounds(ATPA[0]);
-      T := MiddleBox(MBox);
-    end;
-
-    if PointInBox(T, IntToBox(240, 137, 278, 185)) or
-      PointInBox(T, IntToBox( 410, 53, MSX2, 72)) or
-      PointInBox(T, IntToBox( 0, 0, 100, 25)) then
-        Continue;
-
-    //ClearCanvas(SMART_Canvas.canvas, MSX2, MSY2); // could not call proc error a lot, not sure why
-    if DrawDebugs then
-    begin
-      SMART_DrawBoxEx(True, BoxArr[m], clYellow);
-      SMART_DrawBoxEx(False, MBox, clRed);
-    end;
-
-    with MBox do
-      MouseBox(x1, y1, x2, y2, 3);
-
-    if WaitUpTextMulti(['Take'], 100+random(50)) then
-    begin
-      GetMousePos(mmx,mmy);
-      Mouse(mmx,mmy,0,0,False);
-      if WaitOptionMultiEx(['oins','Rune','ones'], 'All', ClickLeft, 1000) then
-      begin
-        Result := True;
-        Writeln('Picking up item');
-        SetColorToleranceSpeed(1);
-        SetColorspeed2Modifiers(0.2,0.2);
-        marktime(flagtimes);
-        while (timefrommark(flagtimes) < 1500) do
-         FlagPresentH;
-        if (timefrommark(flagtimes) > 1500) then writeln('breakin');
-        Wait(100+random(600));
-        BuryBones;
-        Exit;
-      end;
-    end;
-  end;
-
-end;
-
 Function nInFight: Boolean; // Narcle!
 var
   T: TPoint;
@@ -958,7 +964,7 @@ begin
   //writeln(result);
 end;
 
-function FindObjTPAH(var X, Y: Integer; Color, Tol, CTS, ObjWidth, ObjHeight, minCount: Integer; UpText: TStringArray): Boolean; // Wizzup!?
+{function FindObjTPAH(var X, Y: Integer; Color, Tol, CTS, ObjWidth, ObjHeight, minCount: Integer; UpText: TStringArray): Boolean; // Wizzup!? - unused ATM
 var
   I, tCTS: Integer;
   myPoint: TPoint;
@@ -994,34 +1000,7 @@ begin
     end;
   end;
   ColorToleranceSpeed(tCTS);
-end;
-
-function HGetXPBarTotal: LongInt; // Narcle + Icefire
-var
-  Previous: Boolean;
-  TPA: TPointArray;
-  B: TBox;
-  {$IFNDEF Simba}
-  P: TPoint;
-  {$ENDIF}
-begin
-  Previous := IsXPBarOpen;
-  if (ToggleXPBar(True)) then
-    WaitFunc(@IsXPBarOpen, 10, 1500);
-  FindColorsTolerance(TPA, clWhite, 342, 55, 510, 69, 1);
-  B := GetTPABounds(TPA);
-  B := IntToBox(B.X1 - 2, B.Y1 - 2, B.X2 + 2, B.Y2 + 2);
-  {$IFDEF Simba}
-    Result := StrToIntDef(ExtractFromStr(GetTextAtExWrap(B.X1, B.Y1, B.X2, B.Y2,
-                                0, 5, 4, clWhite, 0, 'XPChars'), Numbers), 0);
-  {$ELSE}
-    IsTextInAreaEx(B.X1, B.Y1, B.X2, B.Y2, P.X, P.Y, 'XP', 0, XPChars, False, False, 0, 1, clWhite);
-    Result := StrToIntDef(GetNumbers(GetTextAtEx(P.X, P.Y, 1, XPChars, False, False, 0, 2, clWhite, 60, False, tr_AllChars)), 0);
-  {$ENDIF}
-  if (not (Previous)) then
-    Wait(RandomRange(500, 1500));
-  //ToggleXPBar(Previous);
-end;
+end;}
 
 procedure EatSnacks;
 var chen,ex,ey: integer;
@@ -1063,6 +1042,21 @@ begin
   end;
 end;
 
+procedure TurnOffOnScreenXPPopup;
+var hx,hy:integer;
+begin
+  if Players[CurrentPlayer].Booleans[94] then
+    Exit;
+  if FindDTM(Herz,hx,hy,MSX1,MSY1,MSX2,MSCY-30) then
+  begin
+    WriteLn('Found XP on-screen popup. Turning it off.');
+    MouseBox(521, 51, 546, 75, mouse_Right);
+    Wait(10+Random(100));
+    ChooseOption('op-up');
+    Players[CurrentPlayer].Booleans[94] := True;
+  end;
+end;
+
 function FindVictim: Boolean;
 var breakingthefight,expz,recentone,lastdtm,xz,yz,statuestatus: integer; gottagofast:boolean;
 begin
@@ -1093,7 +1087,8 @@ begin
     yyy := 200-random(30)+random(30);
   end;
   GetReadyToRespawn('');
-  expz:=HGetXPBarTotal;
+  TurnOffOnScreenXPPopup;
+  expz:=GetXPBarTotal;
   if FindDTMRotated(YesS, xxx, yyy, MSX1, MSY1, MSX2, MSY2, -Pi/4, Pi/4, Pi/30, aFound) then
     statuestatus := 1;
   if (statuestatus = 0) and FindDTMRotated(NoS, xxx, yyy, MSX1, MSY1, MSX2, MSY2, -Pi/4, Pi/4, Pi/30, aFound) then
@@ -1156,9 +1151,10 @@ begin
       repeat
         inc(breakingthefight);
         antiban_short('WaitingAttack', 100+Random(500));
+        TurnOffOnScreenXPPopup;
         GetReadyToRespawn('');
         findnormalrandoms;
-        recentone := (HGetXPBarTotal-expz);
+        recentone := (GetXPBarTotal-expz);
         if (recentone>=133) and (recentone<=999) then // make sure no false detection
         begin
           writeLn('You (probably) killed it, 133 exp for you!');
@@ -1194,6 +1190,7 @@ begin
         WriteLn('We took quite a bit to kill him, something might be wrong...');
       antiban_short('KilledWait',500+random(2488));
       CustomPickup;
+      BuryBones;
       SetColorToleranceSpeed(1);
       SetColorspeed2Modifiers(0.2,0.2);
       Exit;
@@ -1417,6 +1414,7 @@ begin
   try
     FreeDTM(YesS);
     FreeDTM(NoS);
+    FreeDTM(Herz);
   except
     WriteLn('FreeDTM Failed!');
   end;
@@ -1456,6 +1454,7 @@ begin
 
   YesS:=DTMFromString('mwQAAAHic42RgYGhhZGCoAeJOIG4E4nYgTgHiZUB8EIiPAPFnoLp3QPwTiL8CsTBQTBCIRYGYDYgfAcWm9TUxVBZlwDEvLy8G5geqI4QZicBwAAAQEBEZ');
   NoS:=DTMFromString('mrAAAAHic42BgYGhiZGCoAeJuIK4H4kwg7gPi/UB8HIiVgFgaiNWBWAWInaHYHojlgbh/6RKGmkmT4ZiXlxcF8wPtwIcZCWAYAABHKQ3h');
+  Herz:=DTMFromString('mbQAAAHicY2VgYNBlZWBQBmIrIDYDYn0gNgeKewKxGxCHQ7GSkhIcJyUlM+ycwcjADxRHx4xYMBgAAKPDBn0=');
 
   AddOnTerminate('FreeGlobalDTMS');
 
