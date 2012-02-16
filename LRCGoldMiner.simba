@@ -1,0 +1,664 @@
+{///////////////////////////////////////////////////////////////////////////////
+//                                                                            //
+//                          Harry's LRC Gold Miner v0.2                       //
+//                                                                            //
+////////////////////////////////////////////////////////////////////////////////
+//                                                                            //
+//  Setup: Position http://i.imgur.com/bSHeA.png (south safespot for gold)    //
+//         Wear a dragon pickaxe - do NOT have it in your inventory!          //
+//         You MIGHT die, so do not wear anything you can't afford to lose.   //
+//         Keep auto-retaliate OFF for reducing chance of death.              //
+//         Make sure you are on lowest grafix settings+highest brightness.    //
+//        After that, you're probably good to go! Watch it a few times.       //
+//        Script will mine and drop the gold ore for pretty fast exp.         //
+//                                                                            //
+//  Good things to do: GIVE ME SOME BLOODY PROGRESS REPORTS IN THE THREAD!    //
+//                       And report any critical bugs you happen to find.     //
+//                                                                            //
+//  My to-do list: Superheat the ore- probably not anytime soon.              //
+//                 Banking- will not do for public due to goldfarmers etc.    //
+//                                                                            //
+//  Known bugs: sometimes doesn't drop the last row of ore; this is due to a  //
+//                chooseoption bug in SRL. No other major issues reported.    //
+//                                                                            //
+////////////////////////////////////////////////////////////////////////////////
+//                                                                            //
+//  Changelog:                                                                //
+//      0.1: Initial release.                                                 //
+//      0.2: Fixed DTM. Added option for those who can't equip pickaxe.       //
+//                                                                            //
+////////////////////////////////////////////////////////////////////////////////
+//                                                                            //
+//   Script License: WTFPL - Do What The Fuck You Want To Public License.     //
+//                                                                            //
+//      This program is free software. It comes without any warranty, to the  //
+//      extent permitted by applicable law. You can redistribute it and/or    //
+//      modify it under the terms of the Do What The Fuck You Want To Public  //
+//      License, Version 2, as published by Sam Hocevar. See                  //
+//      http://sam.zoy.org/wtfpl/COPYING for more details.                    //
+//                                                                            //
+///////////////////////////////////////////////////////////////////////////////}
+
+program HarrysLRCPowerminer;
+{$DEFINE SMART}
+{$i SRL/SRL.simba}
+{$i SRL/SRL/Misc/PaintSmart.simba}
+
+procedure DeclarePlayers;
+begin
+  HowManyPlayers := 1;
+  CurrentPlayer := Random(HowManyPlayers);
+  NumberOfPlayers(HowManyPlayers);
+
+  with Players[0] do
+  begin
+    Name        := '';
+    Pass        := '';
+    Member      := True;
+    Nick        := '';
+    Active      := True;
+  end;
+end;
+
+const
+  SERVER  = 77;    // Enter "0" to pick a random server.
+  SIGNED  = True;  // Use the signed RS-client? Leave at True unless you know what you're doing.
+  MEMBERS = True;  // Set to True if using a RS-Members account. False if F2P.
+  WORLD_SWITCH = False; // Switch world when connecting to RS?
+  WORLD_LEAVE = True; // Hop words every ~25 minutes or so. WORLD_SWITCH must be true.
+  ClearTime = 20; // Clears debug window every X minutes.
+  GetScreenies = True; // Take screenies when stuff that might be interesting happen. These are useful for me if you get a bug, so please leave enabled!
+  DrawDebugs = True; // Paint on SMART window for object finding, etc.
+  CantWearPick = False; // Set to true if you can't wield your pickaxe. Put it in LAST inv slot and it shouldn't be dropped. This is beta and could accidentally drop your pick so use with caution.
+
+  Autochecken = True; // Automatically check for updates and download the newer version of the script if it gets updated.
+
+  SRLStats_Username = ''; // Your SRL Stats Username (not RS!) - get one at http://stats.villavu.com/
+  SRLStats_Password = ''; // Your SRL Stats Password (not RS!) - get one at http://stats.villavu.com/
+
+
+////////////////////////////////////////////////////////////////////////////////
+//                                                                            //
+//   End of Basic Setup - you may continue down more IF you know what you're  //
+//          doing. If not, you will probably break something!...              //
+//                                                                            //
+////////////////////////////////////////////////////////////////////////////////
+
+  MOUSE_SPEED              = 15;
+  MOUSE_SPEED_RANDOMNESS   = 7;
+  // Mouse speed will be "MOUSE_SPEED + Random(MOUSE_SPEED_RANDOMNESS);".
+
+  DebugMe = False; // Get advanced debugs of current procedures. Not suggested.
+
+////////////////////////////////////////////////////////////////////////////////
+//                                                                            //
+//   End of Advanced Setup - really, do NOT touch anything below this....     //
+//           or you will probably break something......... :)                 //
+//                                                                            //
+////////////////////////////////////////////////////////////////////////////////
+
+  SCRIPT_NAME        = 'LRC Gold Miner';
+  SCRIPT_VERSION     = '0.2';
+
+var PlayerSessionTime,ReportTimer,AntiBansGlobal, MonstersKilledGlobal, ExpGainGlobal, xxx,yyy,
+     WorldLeaveMarker, DethWelks, StatsTimer, thetries, goldores,Herz, BonesBurriedGlobal,
+     ProperLog, ReportClear, lasthpbar,tmpbarz : integer; aFound: Extended; sonic: boolean;
+
+
+procedure RandomRClickH; // phantombmx/EvilChicken - removed inv clicking
+var
+  M: Byte;
+  Inv: Boolean;
+  bx,by: integer;
+begin
+  if (not LoggedIn) then exit;
+  M := MouseSpeed;
+  MouseSpeed := 7 + Random(25);
+  bx := Random(MIX2);
+  by := Random(MIY2);
+  if PointInBox(point(bx,by),inttobox(MSX1,MSY1,msx2,msy2)) then
+  begin
+    Mouse(bx, by, 0, 0, False);
+    if (Random(3) > 0) then
+      Inv := ChooseOption('xamine');
+    if (not Inv) then ChooseOption('ancel');
+  end
+  else
+    MMouse(bx, by, 0, 0);
+  MouseSpeed := M;
+end;
+
+procedure AntiBan_Short(disg:string; waitz:integer);
+begin
+  while (waitz > 0) do
+  begin
+    status(disg+': '+tostr(waitz)+'ms');
+    case (Random(100)) of
+      0: begin RandomRClickH; Inc(Players[CurrentPlayer].Integers[2]); Inc(AntiBansGlobal); end;
+      1: begin MouseSpeed := MOUSE_SPEED + Random(MOUSE_SPEED_RANDOMNESS); Inc(Players[CurrentPlayer].Integers[2]); Inc(AntiBansGlobal); end;
+      2: begin if (Random(2) = 0) then PickUpMouse; Inc(Players[CurrentPlayer].Integers[2]); Inc(AntiBansGlobal); end;
+      3..200: begin
+        wait(1);
+      end;
+    end;
+    Wait(100+random(500));
+    waitz:=waitz-(100+random(500));
+  end;
+end;
+
+procedure TurnOffOnScreenXPPopup;
+var hx,hy:integer;
+begin
+  if Players[CurrentPlayer].Booleans[94] then
+    Exit;
+  if FindDTM(Herz,hx,hy,MSX1,MSY1,MSX2,MSCY-30) then
+  begin
+    WriteLn('Found XP on-screen popup. Turning it off.');
+    MouseBox(521, 51, 546, 75, mouse_Right);
+    Wait(10+Random(100));
+    ChooseOption('op-up');
+    Players[CurrentPlayer].Booleans[94] := True;
+  end;
+end;
+
+procedure DropItemH(i:integer);
+begin
+  if ExistsItem(i) then
+  begin
+    MouseItem(i, mouse_Right);
+    if (WaitOptionEx('rop', 'action', ClickLeft, 250)) then
+      wait(1+random(10));//Wait(RandomRange(50, 200));
+  end;
+end;
+
+procedure dropallh; // could do this more efficiently but I don't curr.
+begin
+  //if not SuperHeating then
+  begin
+    IncEx(ExpGainGlobal,1820);
+    IncEx(Players[CurrentPlayer].Integers[69],1820);
+    stats_IncVariable('Total EXP Gained', 1820);
+    stats_IncVariable('Gold Ore (Mined)', 28);
+    IncEx(MonstersKilledGlobal,28);
+  end;{ else
+  begin
+    IncEx(ExpGainGlobal,4529);
+    IncEx(Players[CurrentPlayer].Integers[69],4529);
+    stats_IncVariable('Total EXP Gained', 4529);
+    stats_IncVariable('Gold Ore (Mined)', 26);
+    // inc magicexp smithexp etc.
+    IncEx(MonstersKilledGlobal,26);
+  end;}
+
+  DropItemH(1);
+  DropItemH(1+4);
+  DropItemH(1+8);
+  DropItemH(1+12);
+  DropItemH(1+16);
+  DropItemH(1+20);
+  DropItemH(1+24);
+  DropItemH(2);
+  DropItemH(2+4);
+  DropItemH(2+8);
+  DropItemH(2+12);
+  DropItemH(2+16);
+  DropItemH(2+20);
+  DropItemH(2+24);
+  DropItemH(3);
+  DropItemH(3+4);
+  DropItemH(3+8);
+  DropItemH(3+12);
+  DropItemH(3+16);
+  DropItemH(3+20);
+  DropItemH(3+24);
+  DropItemH(4);
+  DropItemH(4+4);
+  DropItemH(4+8);
+  DropItemH(4+12);
+  DropItemH(4+16);
+  DropItemH(4+20);
+  if not CantWearPick then
+    DropItemH(4+24);
+end;
+
+{procedure SuperbHeat;
+begin
+  WriteLn('SuperHeating your gold! maybe in the future.');
+end;}
+
+function FindVictim: Boolean;
+var breakingthefight,uptextfailes,expz,recentone,xcz,ycz,xzz,yzz,statuestatus: integer; gottagofast:boolean;
+begin
+  Result := False;
+  statuestatus := 0;
+  if sonic then
+    gottagofast:=True
+  else
+    gottagofast:=False;
+  sonic := False;
+  if not loggedin then
+    Exit;
+
+  if invfull then
+  begin
+    wait(random(2000));
+    dropallH;
+  end;
+
+  if WORLD_LEAVE then
+    if (TimeFromMark(PlayerSessionTime) > WorldLeaveMarker) then
+    begin
+      WriteLn('Time''s up! Switching world.');
+      if HowManyPlayers = 1 then
+        ChangeWorld(RandomWorld(Players[CurrentPlayer].Member, False))
+      else
+        RandomNextPlayer(True);
+    end;
+  Inc(thetries);
+  if (xxx > 250) or (yyy > 250) then
+  begin
+   // not really needed anymore WriteLn('recalibrated xxx,yyy coords');
+    xxx := 195-random(30)+random(30);
+    yyy := 175-random(30)+random(30);
+  end;
+  FindNormalRandoms;
+  TurnOffOnScreenXPPopup;
+  if FindDTMRotated(goldores, xxx, yyy, MSX1, MSY1, MSX2, MSY2, -Pi/4, Pi/4, Pi/30, aFound) then
+    statuestatus := 1;
+
+  if statuestatus <> 0 then
+  begin
+
+    if DrawDebugs then
+      if (statuestatus = 1) then
+        SMART_DrawBox(inttobox(xxx-30,yyy-1,xxx+20,yyy+25));
+
+    if not isUpTextMultiCustom(['ineral ','eposit ']) then
+    begin
+      mmouse(xxx-15,yyy+3,35,20);
+      if not isUpTextMultiCustom(['ineral ','eposit ']) then
+        if isUpTextMulticustom(['/ 1 more opti']) then
+        begin
+          writeln('Probably no ore.');
+          getmousepos(xxx,yyy);
+          if pointinbox(point(xxx,yyy),inttobox(88,103,308,266)) then
+          begin
+            writeln('Hovering, waiting for new uptext to mine.');
+            marktime(uptextfailes);
+            getmousepos(xzz,yzz);
+            repeat
+              wait(100+Random(1000));
+              getmousepos(xcz,ycz);
+            until isUpTextMultiCustom(['ineral ','eposit ']) or (TimeFromMark(uptextfailes) > (90000+Random(80000)-Random(80000))) or not pointinbox(point(xcz,ycz),inttobox(xzz-5,yzz-5,xzz+5,yzz+5));
+            if isUpTextMultiCustom(['ineral ','eposit ']) then
+            begin
+              writeln('Yay, we got text. Let''s mine!');
+              wait(100+Random(2000));
+            end else
+            begin
+              writeln('No text still, oh noes. Let''s wait a bit longer.');
+              wait(100+Random(4000));
+            end;
+          end;
+        end;
+
+      //writeln(GetUpText);
+    end
+    else
+      WriteLn('Mouse already over uptext: '+getUpText);
+
+    if gottagofast or WaitUpTextMulti(['ineral ','eposit '], 300)then
+    begin
+      if gottagofast then
+      begin
+        Writeln('SANIC');
+        if DidYellowClick then
+        begin
+          WriteLn('Misclicked... oh nooo.');
+          Exit;
+        end else
+          WriteLn('Went fast!');
+      end;
+      result := true;
+      Getmousepos(xxx,yyy);
+      mouse(xxx,yyy,0,0,true);
+      if DidYellowClick then
+      begin
+        WriteLn('Misclicked! Try again.');
+        Exit;
+      end;
+      WriteLn('Ore clicked.');
+      Players[CurrentPlayer].Integers[25] := 0;
+      thetries := 0;
+      Result := True;
+      antiban_short('AttackWait', 5000+Random(3000));
+      breakingthefight := 0;
+      repeat
+        inc(breakingthefight);
+        antiban_short('WaitingMining', 100+Random(500));
+        TurnOffOnScreenXPPopup;
+        findnormalrandoms;
+        recentone := (GetXPBarTotal-expz);
+
+        if InvFull then Break else tmpbarz := 0;
+        if not FindDTMRotated(goldores, xxx, yyy, MSX1, MSY1, MSX2, MSY2, -Pi/4, Pi/4, Pi/30, aFound) then
+        begin
+          writeln('Living Rock finished mining ?');
+          wait(100+Random(1000));
+          if not FindDTMRotated(goldores, xxx, yyy, MSX1, MSY1, MSX2, MSY2, -Pi/4, Pi/4, Pi/30, aFound) then
+          begin
+            Writeln('yep!');
+            break;
+          end else
+          begin
+            writeln('nope!');
+            wait(1);
+          end;
+        end;
+      until (breakingthefight > 175); // I dunno, about 80 sec?
+      if (breakingthefight > 175) then
+        WriteLn('We took quite a bit to finish mining, something might be wrong...');
+      if invfull then
+      begin
+        wait(random(2000));
+        dropallh;
+      end;
+      antiban_short('KilledWait',random(1000));
+      Exit;
+
+    end;
+
+  end;
+  if Result then wait(500+random(2000)) else wait(100+random(500));
+  if(thetries > 50)then
+  begin
+    //TakeScreen('NoObj');
+    writeln('no object 50 times, your player is a bit broken...');
+    thetries := 0;
+    Players[CurrentPlayer].Loc := 'NoObj';
+    TakeScreen('NoObjFatal');
+    if HowManyPlayers = 1 then
+    begin
+      WriteLn('Player false..!');
+      PlaySound('C:/Simba/alarm.wav');
+    end;
+    RandomNextplayer(False);
+    Exit;
+  end;
+  if (thetries>1)then
+    writeln('No object found ('+tostr(thetries)+' tries); Make sure you''re on lowest grafix settings+highest brightness.');
+
+  if(thetries=13)then
+  begin
+    MakeCompass('rand');
+    ClickNorth(SRL_ANGLE_HIGH);
+  end;
+
+end;
+
+procedure PrintReports;
+var
+  QC: array [0..1] of TStringArray; // Query = 0, Counter = 1.
+  I, II: Byte;
+begin
+  if (TimeFromMark(ReportClear) > ClearTime*60000) then
+  begin
+    ClearDebug;
+    MarkTime(ReportClear);
+  end;
+  WriteLn('[REPORT]');
+  SRLRandomsReport;
+  WriteLn('');
+
+  for II := 0 to 1 do
+    SetArrayLength(QC[II], 4);
+
+  QC[0] := ['Total runtime:',
+    'Players active:',
+    'Ores mined:',
+    '-> Ores mined per hour:'];
+  QC[1] := [TimeRunning,
+    ToStr(PlayersActive) + ' out of ' + ToStr(HowManyPlayers),
+    ToStr(MonstersKilledGlobal),
+    ToStr((3600 * (MonstersKilledGlobal)) div (GetTimeRunning div 1000 + 1))];
+
+  WriteLn('<!---');
+  WriteLn('<! ' + Padr('Harry''s ' + SCRIPT_NAME, 35) + 'v' + SCRIPT_VERSION);
+  WriteLn('<!---');
+
+  II := High(QC[0]);
+  for I := 0 to II do
+    WriteLn('<! ' + Padr(QC[0][I], 32) + QC[1][I]);
+
+  WriteLn('<!---');
+  WriteLn('<! ## | Nick | A | CB. | ExpGain/Hr: | Rand:')
+
+  for I := 0 to HowManyPlayers - 1 do
+    WriteLn('<! ' + Padr(ToStr(I),                                 3) +
+      '| ' + Padr(Copy(Players[I].Nick, 1, 4),                     5) +
+      '| ' + Padr(ToStr(Players[I].Active)[1],                     2) +
+      '| ' + Padr(ToStr(Players[I].Integers[44]), 4) +
+      '| ' + Padr(ToStr(Players[I].Integers[69])+'/'+ToStr((3600 * (Players[I].Integers[69])) div (GetTimeRunning div 1000 + 1)),12) +
+      '| ' + Players[I].Rand);
+
+  WriteLn('<! Total anti-ban procedures run: '+ inttostr(AntiBansGlobal));
+  if WORLD_LEAVE then
+    WriteLn('<! World-hop in: '+ tostr(((Worldleavemarker + PlayerSessionTime) - (GetSystemTime)) div 60000) +' minutes.');
+  if DethWelks > 0 then
+    WriteLn('<! Death-walked '+toStr(DethWelks)+' times.');
+  if BonesBurriedGlobal > 0 then
+    WriteLn('<! Burried '+tostr(bonesburriedglobal)+' bones.');
+
+  if (TimeFromMark(StatsTimer) > 360000) then // 6 minutes.
+  begin
+    Stats_Commit;
+    MarkTime(StatsTimer);
+    WriteLn('<! Sent stats in!');
+  end;
+
+  if (SRLStats_Username = '') then
+    WriteLn('<! Please consider getting your own stats username @ http://stats.villavu.com');
+
+  WriteLn('<!---');
+  WriteLn('[/REPORT]');
+end;
+
+procedure Player_OnLogIn;
+begin
+  Wait(1000+Random(2000));
+  if (FindNormalRandoms) then
+    if (not Players[CurrentPlayer].Active) then
+    begin
+      WriteLn('Player is in a random.');
+      LogOut;
+      Players[CurrentPlayer].Active := False;
+      Players[CurrentPlayer].Status := 'InRandom';
+      Exit;
+    end;
+
+  MarkTime(PlayerSessionTime);
+  MarkTime(lasthpbar);
+  WorldLeaveMarker := (2100000 + Random(1500000) - Random(1500000)); // 2100000 ms = 35 minutes. 1500000 ms = 25 minutes. Add and subtract the 25 minutes from 35 giving a huge change of randomness for world-switching.
+  //Writeln(tostr(worldleavemarker));
+  ClickNorth(SRL_ANGLE_HIGH);
+  SetRun(True);
+  Players[CurrentPlayer].Integers[43]:=GetSkillLevel(SKILL_MAGIC);
+  Players[CurrentPlayer].Integers[44]:=GetSkillLevel(SKILL_MINING);
+  if (Players[CurrentPlayer].Integers[44] < 79) and (Players[CurrentPlayer].Integers[44] > 2) then
+  begin
+    WriteLn('/!\ ACHTUNG! /!\');
+    WriteLn('Your mining level is too low to mine LRC Gold.');
+  end;
+  if (GetColor(433, 499) = 65280) then // assist on
+  begin
+    MouseBox(412, 485, 452, 497, 2);
+    Wait(10+Random(100));
+    ChooseOption('Off');
+  end;
+end;
+
+procedure Autoupdateme;
+var ClientUp, Neifile:integer;
+    OnlineVersion, NewScript, NeiFeilNennen:string;
+begin
+  if Autochecken then
+  begin
+    writeln('Checking for script updates...');
+    ClientUp := InitializeHTTPClient(False, False);
+    SetHTTPUserAgent(ClientUp,'Simba ' + SCRIPT_VERSION);
+    OnlineVersion := GetHTTPPage(ClientUp,'http://harry.lu/srl/lrc-version.txt');
+    writeln(onlineversion);
+    writeln(script_version)
+    FreeHTTPClient(ClientUp);
+    if (Length(trim(OnlineVersion)) = 3) and (trim(OnlineVersion) > SCRIPT_VERSION) then
+    begin
+      writeLn('Newer script version online!');
+      writeLn('Autoupdating to newer version.');
+      ClientUp := InitializeHTTPClient(False,False);
+      SetHTTPUserAgent(ClientUp,'Simba');
+      NewScript := GetHTTPPage(ClientUp,'http://harry.lu/srl/lrc-current.txt');
+      FreeHTTPClient(ClientUp);
+
+      NeiFeilNennen := AppPath + SCRIPT_NAME + ' v'+trim(OnlineVersion)+' [Pub] by Harry.simba';
+      Neifile := Rewritefile(NeiFeilNennen, true);
+      try
+        WriteFileString(Neifile, NewScript);
+      except
+        begin
+          writeLn('Fatal error writing to '+NeiFeilNennen+'!!');
+          terminatescript;
+        end;
+      end;
+      CloseFile(Neifile);
+      writeLn('New script downloaded and saved at '+NeiFeilNennen+' !! Please use this!');
+      TerminateScript;
+    end else
+    begin
+      if (Length(trim(OnlineVersion)) <> 3) then
+        WriteLn('Version checking failed (debug: length was not equal), you might be outdated.')
+        else writeLn('You have the latest version of the script!');
+      exit;
+    end;
+  end else
+    WriteLn('!!!!! Not checking for latest version, you may be outdated!');
+end;
+
+procedure FreeGlobalDTMs;
+begin
+  try
+    FreeDTM(goldores);
+    FreeDTM(Herz);
+  except
+    WriteLn('FreeDTM Failed!');
+  end;
+  writeln('Thanks for running my script, please post proggies/bugs on http://villavu.com/forum/showthread.php?t=74942 !');
+end;
+
+procedure CrashSMART;
+begin
+  Writeln('You are using CRASHSMART, so we are going to reload your client after the RS update!');
+  SmartgetFieldObject(1488,'crash'); // will crash SMART (and Simba).
+  // IF THIS DOES NOT CRASH YOUR SIMBA, YOU ARE NOT USING THE PROPER PLUGIN
+  // AN ACCESS VIOLATION HERE IS NOT THE CRASH; MAKE SURE YOU MOVED THE EDITED PLUGIN
+  Wait(5000);
+  WriteLn('CRASHSMART Failed: Make sure you are using the proper plugin!');
+  WriteLn('Read more about this feature at http://villavu.com/forum/showthread.php?t=67864');
+  TerminateScript;
+end;
+
+procedure SetUpScript;
+var
+  i,xxx,yyy: Integer;
+begin
+  ClearDebug;
+
+  Smart_Server := SERVER;
+  Smart_Signed := SIGNED;
+  Smart_Members:= MEMBERS;
+
+  Autoupdateme;
+
+  SetupSRL;
+  SetupRandomTool(30000+Random(30000), 2, 'C:/Simba/alarm.wav');
+  Screenshots := GetScreenies;
+  Reincarnate := True;
+  DeclarePlayers;
+  //LampSkill := 'summoning';
+  SmartSetRefresh(100); // highest fps
+
+  goldores:=DTMFromString('mAAEAAHic42FgYFjOAAFajAwMn4F0DxCLA/EGID4ExOuAeDZUfB4QK0DV2wFxHBCnALEjEIsCsTwQ6wCxGhDLQM2J8LZgwAZi/K0ZKpLsGEoTbRn8XYwY4nwNGaJ8LRn4gXKkYGYSMTIAAJYaD7k=');
+  Herz:=DTMFromString('mbQAAAHicY2VgYNBlZWBQBmIrIDYDYn0gNgeKewKxGxCHQ7GSkhIcJyUlM+ycwcjADxRHx4xYMBgAAKPDBn0=');
+
+  AddOnTerminate('FreeGlobalDTMS');
+
+
+  if (SRLStats_Username = '') then
+    SetupSRLStats(706, 'Anonymous', 'anon1337')
+  else
+    SetupSRLStats(706, SRLStats_Username, SRLStats_Password);
+
+  MouseSpeed := MOUSE_SPEED + Random(MOUSE_SPEED_RANDOMNESS);
+  SRL_Procs[srl_OnLogIn] := @Player_OnLogIn;
+  SRL_Procs[srl_OnRSUpdate] := @CrashSMART;
+
+  for i := 0 to High(Players) do
+  begin
+    if (WORLD_SWITCH) then
+      Players[i].WorldInfo := [Players[i].Member, -1, False];
+    Players[i].Integers[4] := 1;
+  end;
+
+  CurrentPlayer := RandomPlayerIndex;
+  ActivateClient;
+  MarkTime(ProperLog);
+  MarkTime(ReportClear);
+  MarkTime(lasthpbar);
+  xxx := 257-random(30)+random(30);
+  yyy := 200-random(30)+random(30);
+  Wait(1000 + Random(2000));
+end;
+
+procedure MainLoop;
+begin
+  CurrentPlayer := RandomPlayerIndex;
+  LogInPlayer;
+
+  repeat
+    repeat
+      if (TimeFromMark(ReportTimer) > 60000) then // 1 minute
+      begin
+        PrintReports;
+        MarkTime(ReportTimer);
+      end;
+      FindVictim;
+      if (not LoggedIn) then
+      begin
+        WriteLn('Not logged in?');
+        mmouse(random(msx2),random(msy2),0,0);
+        Wait(500+Random(1000));
+        if (not LoggedIn) then Break else Wait(1);
+      end;
+      if LobbyScreen then
+      begin
+        WriteLn('At lobby screen?');
+        Wait(500+Random(1000));
+        if (LobbyScreen) then Break else Wait(1);
+      end;
+    until(False);
+    if LobbyScreen then
+      LeaveLobby;
+
+    WriteLn('Detected as logged out, NPlayer');
+    if not Players[CurrentPlayer].Active then
+    begin
+      WriteLn('Player false..!');
+      PlaySound('C:/Simba/alarm.wav');
+    end;
+    RandomNextPlayer(Players[CurrentPlayer].Active);
+  until False;
+end;
+
+begin
+  SetUpScript;
+  MainLoop;
+end.
