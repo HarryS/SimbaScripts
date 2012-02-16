@@ -1,6 +1,6 @@
 {///////////////////////////////////////////////////////////////////////////////
 //                                                                            //
-//                        Harry's Catacomb Grabber v1.0                       //
+//                        Harry's Catacomb Grabber v1.1                       //
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
@@ -42,6 +42,7 @@
 //      1.0: Turns off ugly onscreen XP popups (terrible update Jagex, really //
 //              ugly). Also supports new XP counter - make sure your fonts    //
 //              in Simba are up-to-date!                                      //
+//      1.1: Fixed DTM.                                                       //
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
@@ -117,7 +118,7 @@ const
 ////////////////////////////////////////////////////////////////////////////////
 
   SCRIPT_NAME        = 'Catacomb Grabber';
-  SCRIPT_VERSION     = '1.0';
+  SCRIPT_VERSION     = '1.1';
 
 var PlayerSessionTime,ReportTimer,AntiBansGlobal, MonstersKilledGlobal, ExpGainGlobal, xxx,yyy,
      WorldLeaveMarker, DethWelks, StatsTimer, thetries, YesS,NoS,Herz, DTMFsf, BonesBurriedGlobal,
@@ -379,7 +380,7 @@ begin
   Q[9] := DTMFromString('mzgIAAHiczc69CwEBGMfx5/gDbBZlEMqElJOBupTlFi+DUkqynpcYRLId7koUNgarUf4+3/LsRvfUp55+z9PTkxCRd0jkAB8uFtjhggeeeOl8gxm66KCNofY2qjCRQx4FlDSvo4E+pvBwwwl3DPilhRpMJBFFDClkUYaDJVbowUYRacR1P6OZhaZ8b4+xxhZHXNUZe8xRwWTkiCHhv4vwSxAYAfG7PnS8Hjc=');
   Q[10] := DTMFromString('mpAIAAHicxc6xCwFxGMbxl7qMihuUgcWmrkuWG5SIMmIwGO46udIlJkkZlMFgoa6bKZuSv9D36t2Nv7c+9dbz1PvWReSbF3nihhdSXHDGFnOMMEQfE4SaZZ07Hnhrr4MWPAwwRYQDEr3xwQ5j9PihDQ9LBJihC0dleRM1VFBGCTaqaMCFj5Xa44QrUiS6H7HGBjGihS8FyzKmyA8m5Qz7Nz9t6x4V');
   K[0] := DTMFromString('mWAAAAHicY2FgYPgIxKeAWJyRgUEEiG2BbBEg5gfiVCDm5eVlKCrIZWiqr2GIDPQFiyNjRjQMAgB+Dgbc');
-  K[1] := DTMFromString('mlwAAAHicY2dgYLgGxPuA+D2UfQWIZwGxPCMDgzgQswExCxBzAfFboLgskJYGYj5eXob2hlKG1voShpvn9jBMm9wEFgNhfqA6XJgRD4YCAJYuDi8=');
+  K[1] := DTMFromString('mlwAAAHicY2dgYLAB4lYGCLCC8kOBWAWItYBYD4gNoPKyQCwOxJIMqGDa5CaGm+f2MLTWlzC0N5Qy8APFcGFGPBgKAFacCf8=');
   K[2] := DTMFromString('mrAAAAHic42BgYGBlZGBgAeJfQDY3kGZGw6pALAfEEkAsxghRwwDE34DUayD28XRk4OPjBdN+3s4MoYGeDHFRgQwpCeEMNeXZDPxANfgwIwEMAwBPpgsv');
   try
     MouseSpeed := 18;
@@ -1452,8 +1453,8 @@ begin
   LampSkill := 'hitpoints';
   SmartSetRefresh(100); // highest fps
 
-  YesS:=DTMFromString('mwQAAAHic42RgYGhhZGCoAeJOIG4E4nYgTgHiZUB8EIiPAPFnoLp3QPwTiL8CsTBQTBCIRYGYDYgfAcWm9TUxVBZlwDEvLy8G5geqI4QZicBwAAAQEBEZ');
-  NoS:=DTMFromString('mrAAAAHic42BgYGhiZGCoAeJuIK4H4kwg7gPi/UB8HIiVgFgaiNWBWAWInaHYHojlgbh/6RKGmkmT4ZiXlxcF8wPtwIcZCWAYAABHKQ3h');
+  YesS:=DTMFromString('mwQAAAHic42RgYFAA4gQgjgViJwYIUAZiWSBWBWIJIBaEiqsAsTEQ6wOxIRALA7E4EPMA8bS+JgZsoLIoA475gXxCmJEIDAcA7AAI0w==');
+  NoS:=DTMFromString('mrAAAAHic42BgYJAE4jggDgNiVQYIEANiJSAWBmJ2IGYBYhUg1oBiTiDmgartX7qEAR3UTJoMx/xAPj7MSADDAABsOAkV');
   Herz:=DTMFromString('mbQAAAHicY2VgYNBlZWBQBmIrIDYDYn0gNgeKewKxGxCHQ7GSkhIcJyUlM+ycwcjADxRHx4xYMBgAAKPDBn0=');
 
   AddOnTerminate('FreeGlobalDTMS');
