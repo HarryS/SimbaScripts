@@ -1,6 +1,6 @@
 {///////////////////////////////////////////////////////////////////////////////
 //                                                                            //
-//                        Harry's Catacomb Grabber v1.1                       //
+//                        Harry's Catacomb Grabber v1.2                       //
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
@@ -43,6 +43,7 @@
 //              ugly). Also supports new XP counter - make sure your fonts    //
 //              in Simba are up-to-date!                                      //
 //      1.1: Fixed DTM.                                                       //
+//      1.2: Updated for most recent SRL update.                              //
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
@@ -87,7 +88,7 @@ const
   TrainLowest = False; // Train lowest combat mode? Disable(set to False) if using range/mage.
   ClearTime = 20; // Clears debug window every X minutes.
   EatFoods = True; // Eats lobsters if it detects your HP as being low. BETA. *YOU MAY STILL DIE*
-  GetScreenies = True; // Take screenies when stuff that might be interesting happen. These are useful for me if you get a bug, so please leave enabled!
+  GetScreenies = True; // Take screenies when stuff that might be interesting happen. These are useful for me if you get a bug, so please leave enabled unless you have limited HDD space!
   GrabBones = False; // Pickup and bury bones? Will get you a lot more random events, so be warned.
   DrawDebugs = True; // Paint on SMART window for object finding, etc.
 
@@ -118,7 +119,7 @@ const
 ////////////////////////////////////////////////////////////////////////////////
 
   SCRIPT_NAME        = 'Catacomb Grabber';
-  SCRIPT_VERSION     = '1.1';
+  SCRIPT_VERSION     = '1.2';
 
 var PlayerSessionTime,ReportTimer,AntiBansGlobal, MonstersKilledGlobal, ExpGainGlobal, xxx,yyy,
      WorldLeaveMarker, DethWelks, StatsTimer, thetries, YesS,NoS,Herz, DTMFsf, BonesBurriedGlobal,
@@ -490,7 +491,7 @@ begin
       if ClickToContinue then
       begin
         WriteLn('Xenia is probably talking to you, did you do the Blood Pact quest?');
-        TakeScreen('ClickToContinue');
+        if GetScreenies then TakeScreen('ClickToContinue');
         Players[CurrentPlayer].Loc := 'NoQuest';
         RandomNextPlayer(False);
       end;
@@ -814,7 +815,7 @@ begin
     yyy := 200-random(30)+random(30);
     Players[CurrentPlayer].Loc := 'Dead';
     repeat
-      inc(tmpz)
+      inc(tmpz);
       Wait(1001+Random(1000));
       if (GetColor(413, 7) <> 0) or (tmpz > 5) then // black color on background goes away when screen closed
         Break;
@@ -851,7 +852,7 @@ begin
         begin
           WriteLn('Failed AGAIN! Too bad!');
           Players[CurrentPlayer].Loc := 'FailWalks';
-          if LoggedIn then TakeScreen('FailWalk');
+          if LoggedIn then if GetScreenies then TakeScreen('FailWalk');
           RandomNextPlayer(False);
         end else
         begin
@@ -1165,7 +1166,7 @@ begin
         begin
           if (tmpbarz > 1) then
           begin
-            TakeScreen('StillNoHPBar');
+            if GetScreenies then TakeScreen('StillNoHPBar');
             Writeln('No HP bar after switching worlds... going to kill your player, sorry!');
             Players[CurrentPlayer].Loc := 'NoHPBar';
             RandomNextPlayer(False);
@@ -1235,7 +1236,7 @@ begin
     Players[CurrentPlayer].Loc := 'NoObj';
     if (Players[CurrentPlayer].Integers[25] <> 0) then
     begin
-      TakeScreen('NoObjFatal');
+      if GetScreenies then TakeScreen('NoObjFatal');
       RandomNextplayer(False);
     end
     else
@@ -1296,7 +1297,7 @@ begin
     WriteLn('<! ' + Padr(QC[0][I], 32) + QC[1][I]);
 
   WriteLn('<!---');
-  WriteLn('<! ## | Nick | A | CB. | ExpGain/Hr: | Rand:')
+  WriteLn('<! ## | Nick | A | CB. | ExpGain/Hr: | Rand:');
 
   for I := 0 to HowManyPlayers - 1 do
     WriteLn('<! ' + Padr(ToStr(I),                                 3) +
@@ -1375,7 +1376,7 @@ begin
     SetHTTPUserAgent(ClientUp,'Simba ' + SCRIPT_VERSION);
     OnlineVersion := GetHTTPPage(ClientUp,'http://harry.lu/srl/catacomb-version.txt');
     writeln(onlineversion);
-    writeln(script_version)
+    writeln(script_version);
     FreeHTTPClient(ClientUp);
     if (Length(trim(OnlineVersion)) = 3) and (trim(OnlineVersion) > SCRIPT_VERSION) then
     begin
@@ -1447,7 +1448,7 @@ begin
   Autoupdateme;
 
   SetupSRL;
-  Screenshots := GetScreenies;
+  SRL_RandomScreenShot := GetScreenies;
   Reincarnate := True;
   DeclarePlayers;
   LampSkill := 'hitpoints';
