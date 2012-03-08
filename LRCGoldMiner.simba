@@ -1,6 +1,6 @@
 {///////////////////////////////////////////////////////////////////////////////
 //                                                                            //
-//                          Harry's LRC Gold Miner v0.2                       //
+//                          Harry's LRC Gold Miner v0.3                       //
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
@@ -26,6 +26,7 @@
 //  Changelog:                                                                //
 //      0.1: Initial release.                                                 //
 //      0.2: Fixed DTM. Added option for those who can't equip pickaxe.       //
+//      0.3: Rename variable for SRL update.                                  //
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
@@ -98,7 +99,7 @@ const
 ////////////////////////////////////////////////////////////////////////////////
 
   SCRIPT_NAME        = 'LRC Gold Miner';
-  SCRIPT_VERSION     = '0.2';
+  SCRIPT_VERSION     = '0.3';
 
 var PlayerSessionTime,ReportTimer,AntiBansGlobal, MonstersKilledGlobal, ExpGainGlobal, xxx,yyy,
      WorldLeaveMarker, DethWelks, StatsTimer, thetries, goldores,Herz, BonesBurriedGlobal,
@@ -376,7 +377,7 @@ begin
     writeln('no object 50 times, your player is a bit broken...');
     thetries := 0;
     Players[CurrentPlayer].Loc := 'NoObj';
-    TakeScreen('NoObjFatal');
+    if GetScreenies then TakeScreen('NoObjFatal');
     if HowManyPlayers = 1 then
     begin
       WriteLn('Player false..!');
@@ -580,7 +581,7 @@ begin
 
   SetupSRL;
   SetupRandomTool(30000+Random(30000), 2, 'C:/Simba/alarm.wav');
-  Screenshots := GetScreenies;
+  SRL_RandomScreenShot := GetScreenies;
   Reincarnate := True;
   DeclarePlayers;
   //LampSkill := 'summoning';
