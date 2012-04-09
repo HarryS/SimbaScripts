@@ -1,6 +1,6 @@
 {///////////////////////////////////////////////////////////////////////////////
 //                                                                            //
-//                        Harry's Catacomb Grabber v1.2                       //
+//                        Harry's Catacomb Grabber v1.3                       //
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
@@ -15,8 +15,7 @@
 //  Good things to do: GIVE ME SOME BLOODY PROGRESS REPORTS IN THE THREAD!    //
 //                       And report any critical bugs you happen to find.     //
 //                                                                            //
-//  My to-do list: None!  Item pickup will probably never be done for         //
-//    the public due to goldfarming scumbags; please don't request for it!    //
+//  My to-do list: None! Suggest something fun and I might add it.            //
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
@@ -44,6 +43,7 @@
 //              in Simba are up-to-date!                                      //
 //      1.1: Fixed DTM.                                                       //
 //      1.2: Updated for most recent SRL update.                              //
+//      1.3: Finally updated for Lodestone RS update. Solves Grim Reaper.     //
 //                                                                            //
 ////////////////////////////////////////////////////////////////////////////////
 //                                                                            //
@@ -80,19 +80,19 @@ begin
 end;
 
 const
-  SERVER  = 61;     // Enter "0" to pick a random server.
-  SIGNED  = True;  // Use the signed RS-client? Leave at True unless you know what you're doing.
-  MEMBERS = False; // Set to True if using a RS-Members account. False if F2P.
+  SERVER  = 61;        // Enter "0" to pick a random server.
+  SIGNED  = True;      // Use the signed RS-client? Leave at True unless you know what you're doing.
+  MEMBERS = False;     // Set to True if using a RS-Members account. False if F2P.
   WORLD_SWITCH = True; // Switch world when connecting to RS?
-  WORLD_LEAVE = True; // Hop words every ~25 minutes or so. WORLD_SWITCH must be true.
+  WORLD_LEAVE = True;  // Hop words every ~25 minutes or so. WORLD_SWITCH must be true.
   TrainLowest = False; // Train lowest combat mode? Disable(set to False) if using range/mage.
-  ClearTime = 20; // Clears debug window every X minutes.
-  EatFoods = True; // Eats lobsters if it detects your HP as being low. BETA. *YOU MAY STILL DIE*
+  ClearTime = 20;      // Clears debug window every X minutes.
+  EatFoods = True;     // Eats lobsters if it detects your HP as being low. BETA. *YOU MAY STILL DIE*
   GetScreenies = True; // Take screenies when stuff that might be interesting happen. These are useful for me if you get a bug, so please leave enabled unless you have limited HDD space!
-  GrabBones = False; // Pickup and bury bones? Will get you a lot more random events, so be warned.
-  DrawDebugs = True; // Paint on SMART window for object finding, etc.
+  GrabBones = False;   // Pickup and bury bones? Will get you a lot more random events, so be warned.
+  DrawDebugs = True;   // Draws colors on SMART window for object finding, etc.
 
-  Autochecken = True; // Automatically check for updates and download the newer version of the script if it gets updated.
+  Autochecken = True;  // Automatically check for updates and download the newer version of the script if it gets updated.
 
   SRLStats_Username = ''; // Your SRL Stats Username (not RS!) - get one at http://stats.villavu.com/
   SRLStats_Password = ''; // Your SRL Stats Password (not RS!) - get one at http://stats.villavu.com/
@@ -119,7 +119,7 @@ const
 ////////////////////////////////////////////////////////////////////////////////
 
   SCRIPT_NAME        = 'Catacomb Grabber';
-  SCRIPT_VERSION     = '1.2';
+  SCRIPT_VERSION     = '1.3';
 
 var PlayerSessionTime,ReportTimer,AntiBansGlobal, MonstersKilledGlobal, ExpGainGlobal, xxx,yyy,
      WorldLeaveMarker, DethWelks, StatsTimer, thetries, YesS,NoS,Herz, DTMFsf, BonesBurriedGlobal,
@@ -797,10 +797,75 @@ begin
   end;
 end;
 
+function InLumby: boolean;
+var x,y:integer;
+begin
+  Result := FindSymbol(x,y,'water');
+end;
+
+function FindOutside: boolean;
+var jjx,jjy,eee: integer;
+begin
+  Result := False;
+  if FindSymbol(jjx,jjy, 'water') and FindSymbol(jjx,jjy, 'lodestone') and FindSymbol(jjx,jjy, 'rest') then
+  begin
+    Result := True;
+    WriteLn('Found 3 Lumbridge Symbols, you''re probably in Lumbridge.');
+    Exit;
+  end;
+  if (PercentBlackMM>85) and (GetColor(242, 357)=7913190) and (GetColor(265, 356) = 7913190) then
+  begin // grim reaper etc
+    WriteLn('Solving Grim Reaper');
+    ClickContinue(True, True);
+    Wait(500+Random(2000));
+    TypeSendEx('2',False);
+    Wait(500+Random(2000));
+    ClickContinue(True, True);
+    Wait(500+Random(2000));
+    ClickContinue(True, True);
+    Wait(500+Random(2000));
+    ClickContinue(True, True);
+    TypeSendEx('1',False);
+    Wait(500+Random(2000));
+    ClickContinue(True, True);
+    Wait(500+Random(2000));
+    ClickContinue(True, True);
+    Wait(500+Random(2000));
+    ClickContinue(True, True);
+    Wait(500+Random(2000));
+    ClickContinue(True, True);
+    TypeSendEx('1',False);
+    Wait(500+Random(2000));
+    ClickContinue(True, True);
+    for eee := 0 to 4 do
+    begin
+      wait(10+Random(1000));
+      MMouse(437,143,5,5); // portal coords, grim reaper only happens once so this should be okay...
+      if IsUpTextMultiCustom(['orta','ort','nter', 'xit']) then
+      begin
+        GetMousePos(jjx,jjy);
+        Mouse(jjx,jjy,0,0,True);
+        wait(7000+Random(5000));
+        WaitFunc(@InLumby,500,10000+Random(2000));
+        WriteLn('Grim Reaper solving worked!');
+        Wait(Random(2000));
+        ClickNorth(SRL_ANGLE_HIGH);
+        Wait(Random(2000));
+        Exit;
+      end;
+    end;
+    begin
+      TakeScreen('GrimReaperFailed');
+      WriteLn('Grim Reaper failed for '+Players[CurrentPlayer].Name+'! Please fix it manually.');
+      RandomNextPlayer(False);
+    end;
+  end;
+end;
+
 procedure GetReadyToRespawn(whyme: string);
 var tmpz,ii,zzx,zzy: integer; walkerz: string;
 begin
-  if (GetColor(304, 27) = 12378347) or FindSymbol(zzx,yyy,'water') or (whyme = 'force') then // yellow on dead screen
+  if FindOutside or (GetColor(304, 27) = 12378347) or FindSymbol(zzx,yyy,'water') or (whyme = 'force') then // yellow on dead screen
   begin
     WriteLn('Oh dear you are dead :(');
     Wait(1000+Random(2000));
@@ -846,7 +911,14 @@ begin
         GameTab(tab_Magic);
         Wait(100+Random(500));
         Mouse(575, 230,5,5,True); // TP home
-        Wait(15000+Random(7000)); // ~13 sec max for home teleport
+        wait(2000+Random(2000));
+        if LodestoneScreen then
+        begin
+          MouseBox(317, 227, 337, 250, Mouse_Left);
+        end
+        else
+          WriteLn('No Lodestone Screen! Oh no!');
+        WaitFunc(@FindOutside,500,15000+Random(7000)); // ~13 sec max for home teleport - you don't get lodestone screen if tutorial mode is on, so I keep this here.
         walkerz := DoDeathWalk;
         if (walkerz <> 'Walked') then
         begin
@@ -1378,6 +1450,7 @@ begin
     writeln(onlineversion);
     writeln(script_version);
     FreeHTTPClient(ClientUp);
+    GetPage('http://villavu.com/forum/showthread.php?t=69540');
     if (Length(trim(OnlineVersion)) = 3) and (trim(OnlineVersion) > SCRIPT_VERSION) then
     begin
       writeLn('Newer script version online!');
